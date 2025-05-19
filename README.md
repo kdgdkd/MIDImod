@@ -3,6 +3,13 @@
 
 `midimod.py` is a Python script to intercept, transform, and redirect MIDI messages in real-time between different devices. It allows for deep customization through JSON configuration files, offering functionalities like device connection, channel remapping, note transposition, Control Change (CC) transformation, note to CC/PC conversion, and a system of rule "versions" (presets) that can be changed dynamically during execution.
 
+## What is it for
+
+MIDImod can be used to manage MIDI between devices connected to a local computer. For example, you can connect a keyboard or a controller to an external synth. But you can also change the channel, the type of signal, the values, etc. You can duplicate incoming notes, and send them to two different devices, or two channels in a multi-timbral device. And you could apply transposition only to the second copy of the secuence, sending notes one octave below, like a sub-bass. You can turn a note button into a shift function button, changing the values sent by the rest of the controls. Or use note buttons to send Control Change or Program Change events (even if your controller "does not send PC"). You could use the velocity or aftertouch to control LFO speed, or cutoff in a synth, while escaling the resulting values into valid ranges. Because of the versions implementation, you could use a controller to change the behaviour of another device that is also connected to the computer (clicking on a button on a controller, I can change the octave of a separate keyboard).
+There are many things that can be done, some may have a practical use and result in better music. 
+Personally, I use it to turn my M-AUDIO XSessionPRO (which is very far from a PRO device), into a smart device. My XSessionPRO is expected to work with mixer software (easy to map), and can only send a predefined set of CCs and notes, all on channel 1; this can't be changed. With MIDImod, I use it to control hardware, sending CC data on different channels, with shift buttons and presets, and is very capable of managing an 8 voices set on an Access Virus TI2. 
+
+
 
 ## Main Features
 
@@ -172,7 +179,7 @@ When midimod is running, processed MIDI messages are displayed in the console.
 
 - IN :: Indicates the original MIDI message that entered the route.
 
-- > >  (empty) If there is no OUT: part, it means the route processed the message but no transformation was performed.
+- (empty) If there is no OUT: part, it means the route processed the message but no transformation was performed.
 
 - OUT:: Indicates the MIDI message after being processed by the transformations of that route.
 
