@@ -1,0 +1,102 @@
+
+    {
+        "_comment": "Mapeo X-Session Pro para Access Virus TI2 ch1-6+8",
+        "devices": {
+            "Controlador": "USB X-Session",
+            "Dispositivo_Salida1": "USB Uno MIDI Interface",
+            "Dispositivo_Salida2": "loopMIDI Port 1" 
+        },
+        "routes": [
+            {
+                "_comment": "Ruta 1: ",
+                "input_device_alias": "Controlador",
+                "output_device_alias": "Dispositivo_Salida1",
+                "version_midi_map": {
+                    "note_on note=44": 1,        
+                    "note_on note=45": 2,           
+                    "note_on note=46": 1, 
+                    "note_on note=43": 2,     
+                    "note_on note=56": 1, 
+                    "note_on note=57": 2,     
+                    "note_on note=70": 1,     
+                    "note_off note=70": 0, 
+                    "note_on note=58": 9, 
+                    "note_off note=58": 0, 
+                    "note_on note=69": 2, 
+                    "note_off note=69": 0, 
+                    "note_on note=59": 9, 
+                    "note_off note=59": 0  
+                },
+
+                "transformations": [
+                
+                    { "_comment": "a1", "version": [0, 1, 2], "ch_in": [0], "cc_in": 24, "ch_out": [0], "cc_out": 112 },
+                    { "_comment": "a2", "version": [0, 1, 2], "ch_in": [0], "cc_in": 25, "ch_out": [0], "cc_out": 113 },
+                    { "_comment": "a3", "version": [0, 1, 2], "ch_in": [0], "cc_in": 26, "ch_out": [0], "cc_out": 114 },
+                
+                    { "_comment": "b1", "version": 0, "ch_in": [0], "cc_in": 27, "ch_out": [1], "cc_out": 112 },
+                    { "_comment": "b2", "version": 0, "ch_in": [0], "cc_in": 28, "ch_out": [1], "cc_out": 113 },
+                    { "_comment": "b3", "version": 0, "ch_in": [0], "cc_in": 29, "ch_out": [1], "cc_out": 114 },
+                    
+                    { "_comment": "c1", "version": 0, "ch_in": [0], "cc_in": 34, "ch_out": [2], "cc_out": 112 },
+                    { "_comment": "c2", "version": 0, "ch_in": [0], "cc_in": 35, "ch_out": [2], "cc_out": 113 },
+                    { "_comment": "c3", "version": 0, "ch_in": [0], "cc_in": 36, "ch_out": [2], "cc_out": 114 },
+            
+                    { "_comment": "d1", "version": 0, "ch_in": [0], "cc_in": 31, "ch_out": [4], "cc_out": 112 },
+                    { "_comment": "d2", "version": 0, "ch_in": [0], "cc_in": 32, "ch_out": [4], "cc_out": 113 },
+                    { "_comment": "d3", "version": 0, "ch_in": [0], "cc_in": 33, "ch_out": [4], "cc_out": 114 },
+            
+                    { "_comment": "fader1", "version": [0, 1, 2], "ch_in": [0], "cc_in": 12, "ch_out": [0, 8], "cc_out": 7 },  
+                    { "_comment": "fader2", "version": [0, 1, 2], "ch_in": [0], "cc_in": 11, "ch_out": [1], "cc_out": 7 },
+                    { "_comment": "fader3", "version": [0, 1, 2], "ch_in": [0], "cc_in": 14, "ch_out": [2, 3], "cc_out": 7 },
+                    { "_comment": "fader4", "version": [0, 1, 2], "ch_in": [0], "cc_in": 15, "ch_out": [4, 5], "cc_out": 7 },
+            
+                    { "_comment": "x-fader", "version": [0, 1, 2], "ch_in": [0], "cc_in": 17, "ch_out": [8], "cc_out": 91, "cc_range": [0, 100] },
+                    { "_comment": "x-fader inv", "version": [0, 1, 2], "ch_in": [0], "cc_in": 20, "ch_out": [0], "cc_out": 91, "cc_range": [64, 127] },
+                    
+                    { "_comment": "b1-alt HP1", "version": 1, "ch_in": [0], "cc_in": 27, "ch_out": [8], "cc_out": 112 },
+                    { "_comment": "b2-alt HP1", "version": 1, "ch_in": [0], "cc_in": 28, "ch_out": [8], "cc_out": 113 },
+                    { "_comment": "b3-alt HP1", "version": 1, "ch_in": [0], "cc_in": 29, "ch_out": [8], "cc_out": 114 },
+
+                    { "_comment": "c1-alt HP1", "version": 1, "ch_in": [0], "cc_in": 34, "ch_out": [3], "cc_out": 112 },
+                    { "_comment": "c2-alt HP1", "version": 1, "ch_in": [0], "cc_in": 35, "ch_out": [3], "cc_out": 113 },
+                    { "_comment": "c3-alt HP1", "version": 1, "ch_in": [0], "cc_in": 36, "ch_out": [3], "cc_out": 114 },
+
+                    { "_comment": "d1-alt HP1", "version": 1, "ch_in": [0], "cc_in": 31, "ch_out": [5], "cc_out": 112 },
+                    { "_comment": "d2-alt HP1", "version": 1, "ch_in": [0], "cc_in": 32, "ch_out": [5], "cc_out": 113 },
+                    { "_comment": "d3-alt HP1", "version": 1, "ch_in": [0], "cc_in": 33, "ch_out": [5], "cc_out": 114 },
+                    
+                    { "_comment": "c1-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 34, "ch_out": [] },
+                    { "_comment": "c2-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 35, "ch_out": [2], "cc_out": 91 },
+                    { "_comment": "c3-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 36, "ch_out": [3], "cc_out": 91 },
+
+                    { "_comment": "d1-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 31, "ch_out": [] },
+                    { "_comment": "d2-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 32, "ch_out": [4], "cc_out": 91 },
+                    { "_comment": "d3-alt vols HP2", "version": 2, "ch_in": [0], "cc_in": 33, "ch_out": [5], "cc_out": 91 },
+            
+                    { "_comment": "c1-mute", "version": 9, "ch_in": [0], "cc_in": 34, "ch_out": [] },
+                    { "_comment": "c2-mute", "version": 9, "ch_in": [0], "cc_in": 35, "ch_out": [] },
+                    { "_comment": "c3-mute", "version": 9, "ch_in": [0], "cc_in": 36, "ch_out": [] },
+                    { "_comment": "b1-mute", "version": 9, "ch_in": [0], "cc_in": 27, "ch_out": [] },
+                    { "_comment": "b2-mute", "version": 9, "ch_in": [0], "cc_in": 28, "ch_out": [] },
+                    { "_comment": "b3-mute", "version": 9, "ch_in": [0], "cc_in": 29, "ch_out": [] },
+                    { "_comment": "d1-mute", "version": 9, "ch_in": [0], "cc_in": 31, "ch_out": [] },
+                    { "_comment": "d2-mute", "version": 9, "ch_in": [0], "cc_in": 32, "ch_out": [] },
+                    { "_comment": "d3-mute", "version": 9, "ch_in": [0], "cc_in": 33, "ch_out": [] }
+                
+                ]
+            },
+            {
+              "_comment": "Ruta 2: TecladoPrincipal a SinteB_Virtual - Passthrough con filtro de canal",
+              "input_device_alias": "TecladoPrincipal",
+              "output_device_alias": "SinteB_Virtual",
+              "transformations": [
+                {
+                  "_comment": "Solo pasar mensajes del Ch2 (idx 1) y enviarlos por el Ch2",
+                  "ch_in": [1],
+                  "ch_out": [1] 
+                }
+              ]
+            }
+        ]
+    }
