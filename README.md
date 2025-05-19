@@ -1,194 +1,201 @@
-# MIDImod: Transformaciones MIDI
+# MIDImod: MIDI Transformations
 
-`midimod.py` es un script de Python para interceptar, transformar y redirigir mensajes MIDI en tiempo real entre diferentes dispositivos. Permite una personalización profunda a través de archivos de configuración JSON, ofreciendo funcionalidades como conexión de dispositivos, remapeo de canales, transposición de notas, transformación de Control Changes (CCs), conversión de notas a CC/PC, y un sistema de "versiones" (presets) de reglas que se pueden cambiar dinámicamente durante la ejecución.
 
-## Características Principales
+`midimod.py` is a Python script to intercept, transform, and redirect MIDI messages in real-time between different devices. It allows for deep customization through JSON configuration files, offering functionalities like device connection, channel remapping, note transposition, Control Change (CC) transformation, note to CC/PC conversion, and a system of rule "versions" (presets) that can be changed dynamically during execution.
 
-- **Definición de Dispositivos por Alias:** Define nombres amigables (alias) para tus dispositivos MIDI en una sección global, y luego usa estos alias en tus rutas para mayor claridad y facilidad de mantenimiento.
-- **Ruteo Múltiple:** Define múltiples "rutas" de procesamiento, cada una conectando un dispositivo de entrada MIDI (identificado por alias o subcadena) a un dispositivo de salida. Un mismo dispositivo de entrada puede alimentar múltiples rutas, y múltiples rutas pueden enviar a un mismo dispositivo de salida.
-- **Procesamiento Secuencial:** Dentro de cada ruta, las transformaciones se aplican en el orden en que se definen en el archivo JSON. La salida de una transformación es la entrada de la siguiente.
-- **Transformaciones Detalladas:**
-  - Cambio de Canal (`ch_in`, `ch_out`).
-  - Transposición de Notas (`nt_st`).
-  - Remapeo de Control Changes (`cc_in`, `cc_out`).
-  - Escalado de Rango de CC (`cc_range`).
-  - Escalado de Velocidad de Nota (`velocity_range`).
-  - Conversión de Nota a CC (`note_to_cc`), incluyendo opción de usar la velocidad de la nota como valor del CC.
-  - Conversión de Nota a Program Change (`note_to_pc`).
-  - Conversión de Aftertouch a CC (`aftertouch_to_cc`), con escalado de valor opcional.
-- **Sistema de Versiones de Reglas (Presets):**
-  - Define diferentes comportamientos para tus transformaciones usando la clave `"version"` (un entero o una lista de enteros).
-  - Las reglas sin la clave `"version"` dentro de una ruta se aplican siempre (independientemente de la versión activa para esa ruta).
-  - Cambia la `current_active_version` global dinámicamente mediante:
-    - **Teclado:** Teclas numéricas (0-9) para selección directa, Barra Espaciadora para ciclar (la ventana de la consola debe tener el foco).
-    - **MIDI:** Configura `version_midi_map` (específico de cada ruta) para que mensajes MIDI concretos seleccionen una versión o realicen acciones de ciclo (ej. `"cycle"`, `"cycle_previous"`).
-- **Selector Interactivo de Archivos de Reglas:** Si se ejecuta sin especificar archivos de reglas, `midimod` presenta una interfaz en la consola para seleccionar y ordenar los archivos de reglas a cargar de la carpeta `rules/`.
-- **Logueo en Tiempo Real:** Muestra los mensajes MIDI de entrada y sus correspondientes salidas (si una ruta y sus reglas actuaron sobre el mensaje) en la consola, indicando la versión activa y el identificador de la ruta.
-- **Configuración Centralizada por JSON:** Toda la lógica de definición de dispositivos, ruteo y transformación se define en archivos JSON externos.
 
-## Requisitos Previos
+## Main Features
 
-- Python 3.7 o superior.
-- Bibliotecas de Python: `mido`, `python-rtmidi`, `prompt_toolkit`.
 
-### Instalación de Dependencias
+- **Define Devices by Alias:** Define friendly names (aliases) for your MIDI devices in a global section, and then use these aliases in your routes for greater clarity and ease of maintenance.
+- **Multiple Routing:** Define multiple processing "routes," each connecting a MIDI input device (identified by alias or substring) to an output device. A single input device can feed multiple routes, and multiple routes can send to a single output device.
+- **Sequential Processing:** Within each route, transformations are applied in the order they are defined in the JSON file. The output of one transformation is the input of the next.
+- **Detailed Transformations:**
+  - Channel Change (`ch_in`, `ch_out`).
+  - Note Transposition (`nt_st`).
+  - Control Change Remapping (`cc_in`, `cc_out`).
+  - CC Range Scaling (`cc_range`).
+  - Note Velocity Scaling (`velocity_range`).
+  - Note to CC Conversion (`note_to_cc`), including an option to use note velocity as CC value.
+  - Note to Program Change Conversion (`note_to_pc`).
+  - Aftertouch to CC Conversion (`aftertouch_to_cc`), with optional value scaling.
+- **Rule Version System (Presets):**
+  - Define different behaviors for your transformations using the `"version"` key (an integer or a list of integers).
+  - Rules without the `"version"` key within a route always apply (regardless of the active version for that route).
+  - Change the global `current_active_version` dynamically via:
+    - **Keyboard:** Numeric keys (0-9) for direct selection, Spacebar to cycle (the console window must have focus).
+    - **MIDI:** Configure `version_midi_map` (route-specific) for specific MIDI messages to select a version or perform cycle actions (e.g., `"note_on note=60 channel=0": 1`, `"note_on note=108": "cycle"`).
+- **Interactive Rule File Selector:** If run without specifying rule files, `midimod` presents a console interface to select and sort the rule files to load from the `rules/` folder.
+- **Real-time Logging:** Displays input MIDI messages and their corresponding outputs (if a route and its rules acted on the message) in the console, indicating the active version and route identifier.
+- **Centralized JSON Configuration:** All logic for device definition, routing, and transformation is defined in external JSON files.
 
-Puedes instalar todas las bibliotecas necesarias usando `pip`, el gestor de paquetes de Python. Abre tu terminal o línea de comandos y ejecuta:
 
-```bash
-pip install mido python-rtmidi prompt-toolkit
+## Prerequisites
+
+
+- Python 3.7 or higher.
+- Python libraries: `mido`, `python-rtmidi`, `prompt_toolkit`.
+
+
+
+### Installing Dependencies
+
+
+You can install all necessary libraries using `pip`, the Python package manager. Open your terminal or command line and run:
+
+
+**pip install mido python-rtmidi prompt-toolkit**
+
+**Note for Linux users:** Sometimes, for python-rtmidi, you might need to install some ALSA development dependencies (e.g., libasound2-dev on Debian/Ubuntu systems).
+
+## Usage
+
+midimod.py is run from the command line.
+
+**Syntax:**
+
+```
+python midimod.py [rule_file_name_1] [rule_file_name_2] [...] [options]
 ```
 
-**Nota para usuarios de Linux:** A veces, para python-rtmidi, podrías necesitar instalar algunas dependencias de desarrollo de ALSA (ej. libasound2-dev en sistemas Debian/Ubuntu).
+- **[rule_file_name_...]**: (Optional) Names of the rule files (without the .json extension) to load from the rules/ subfolder. If omitted, an interactive selector will open. Routes defined in multiple files are combined.
 
-## Uso
-
-midimod.py se ejecuta desde la línea de comandos.
-
-**Sintaxis:**
-
-```
-python midimod.py [nombre_archivo_reglas_1] [nombre_archivo_reglas_2] [...] [opciones]
-```
-
-- **[nombre_archivo_reglas_...]**: (Opcional) Nombres de los archivos de reglas (sin la extensión .json) a cargar desde la subcarpeta rules/. Si se omiten, se abrirá un selector interactivo. Las rutas definidas en múltiples archivos se combinan.
+- **Options:**
   
-- **Opciones:**
+  - --list-ports: Lists detected MIDI input and output devices and exits.
   
-  - --list-ports: Muestra los dispositivos MIDI de entrada y salida detectados y sale.
-    
-  - --help: Muestra información de ayuda detallada sobre el uso y la estructura de los archivos de reglas.
-    
+  - --help: Displays detailed help information on usage and the structure of rule files.
 
-**Ejemplos de Ejecución:**
+**Execution Examples:**
 
-- **Usar el selector interactivo:**
+- **Use the interactive selector:**
   
   ```
   python midimod.py
   ```
   
-  (Navega con flechas, marca/desmarca con Espacio, confirma con Enter).
-  
-- **Cargar un archivo de reglas específico:**
+  (Navigate with arrow keys, mark/unmark with Space, confirm with Enter).
+
+- **Load a specific rule file:**
   
   ```
   python midimod.py virus play
   ```
   
-  (Cargará rules/virus.json y rules/play.json).
-  
-- **Listar puertos MIDI:**
+  (Will load rules/virus.json and rules/play.json).
+
+- **List MIDI ports:**
   
   ```
   python midimod.py --list-ports
   ```
   
+  
 
-## Estructura de los Archivos de Reglas (.json)
+## Structure of Rule Files (.json)
 
-Los archivos de reglas deben estar en formato JSON y ubicarse en una carpeta llamada rules/ en el mismo directorio que midimod.py. Un archivo puede contener un único objeto de "ruta" o una lista de objetos de "ruta".
+Rule files must be in JSON format and located in a folder named rules/ in the same directory as midimod.py. A file can contain a single "route" object or a list of "route" objects.
 
-**Componentes Principales de una Ruta:**
+**Main Components of a Route:**
 
-- **"devices" (Objeto, Opcional):**
+- **"devices" (Object, Optional):**
   
-  - Mapea nombres de alias amigables (ej. "MiControladorPrincipal") a subcadenas de los nombres reales de tus dispositivos MIDI (ej. "X-Session Pro").
-    
-  - midimod usará la sección devices del **primer** archivo de reglas (en el orden de carga) que la contenga.
-    
-- "_comment" (String, Opcional): Descripción general de la ruta. Se mostrará en el resumen de reglas.
+  - Maps friendly alias names (e.g., "MyMainController") to substrings of your actual MIDI device names (e.g., "X-Session Pro").
   
-- "input_device_substring" (String, Opcional): Parte del nombre del dispositivo MIDI de entrada. Si se omite, se usa el primer puerto de entrada disponible.
-  
-- "output_device_substring" (String, Opcional): Parte del nombre del dispositivo MIDI de salida. Si se omite, se usa el primer puerto de salida disponible.
-  
-- "version_midi_map" (Objeto, Opcional): Mapea mensajes MIDI específicos a cambios de la current_active_version o acciones de ciclo (ej. "note_on note=60 channel=0": 1, "note_on note=108": "cycle"). Los mensajes que activan esto son "consumidos".
-  
-- "transformations" (Lista de Objetos): Define las reglas de transformación que se aplican secuencialmente.
-  
-- **"routes" (Lista, Requerida para procesamiento):**
-  
-  - Cada elemento es un objeto que define una ruta de procesamiento.
+  - midimod will use the devices section from the **first** rule file (in load order) that contains it.
 
-**Claves Comunes dentro de un Objeto de Transformación:**
+- "_comment" (String, Optional): General description of the route. It will be displayed in the rules summary.
 
-- "_comment" (String, Opcional): Describe la transformación.
-  
-- "version" (Entero o Lista de Enteros, Opcional): La transformación solo aplica si la current_active_version coincide o está en la lista. Si se omite, la transformación aplica siempre dentro de su ruta.
-  
-- "ch_in" (Lista de Enteros, Opcional): Canales MIDI de entrada (0-15) a los que aplica.
-  
-- "ch_out" (Lista de Enteros, Opcional): Canal(es) MIDI de salida (0-15). Una lista vacía [] filtra el mensaje.
-  
-- "cc_in" (Entero, Opcional): Filtra por este número de CC.
-  
-- "cc_out" (Entero, Opcional): Cambia el número de CC al valor especificado. Si cc_in está presente pero cc_out no, el número de CC no cambia.
-  
-- "cc_range" (Lista [min, max], Opcional): Escala el valor del CC entrante (que coincide con cc_in, o cualquier CC si cc_in no está) al nuevo rango.
-  
-- "nt_st" (Entero, Opcional): Semitonos para transponer notas.
-  
-- "velocity_range" (Lista [min, max], Opcional): Escala la velocidad de los note_on.
-  
-- "note_to_cc" (Objeto, Opcional): Transforma una nota específica en un CC.
-  
-  - Contiene: "note_in", "cc_out", "value_on_note_on", "value_on_note_off", "ch_out_cc", "use_velocity_as_value".
-- "note_to_pc" (Objeto, Opcional): Transforma una nota específica en un Program Change.
-  
-  - Contiene: "note_in", "program_out", "send_on_note_on", "send_on_note_off", "ch_out_pc".
-- "aftertouch_to_cc" (Objeto, Opcional): Transforma mensajes de Channel Aftertouch en CCs.
-  
-  - Contiene: "cc_out", "ch_out_cc", "value_range".
+- "input_device_substring" (String, Optional): Part of the MIDI input device name. If omitted, the first available input port is used.
 
-**Nota:** Para una descripción exhaustiva de todas las claves y su comportamiento, ejecuta 
+- "output_device_substring" (String, Optional): Part of the MIDI output device name. If omitted, the first available output port is used.
+
+- "version_midi_map" (Object, Optional): Maps specific MIDI messages to changes in the current_active_version or cycle actions (e.g., "note_on note=60 channel=0": 1, "note_on note=108": "cycle"). Messages that trigger this are "consumed."
+
+- "transformations" (List of Objects): Defines the transformation rules that are applied sequentially.
+
+- **"routes" (List, Required for processing):**
+  
+  - Each element is an object defining a processing route.
+
+**Common Keys within a Transformation Object:**
+
+- "_comment" (String, Optional): Describes the transformation.
+
+- "version" (Integer or List of Integers, Optional): The transformation only applies if the current_active_version matches or is in the list. If omitted, the transformation always applies within its route.
+
+- "ch_in" (List of Integers, Optional): Input MIDI channels (0-15) it applies to.
+
+- "ch_out" (List of Integers, Optional): Output MIDI channel(s) (0-15). An empty list [] filters the message.
+
+- "cc_in" (Integer, Optional): Filters by this CC number.
+
+- "cc_out" (Integer, Optional): Changes the CC number to the specified value. If cc_in is present but cc_out is not, the CC number does not change.
+
+- "cc_range" (List [min, max], Optional): Scales the incoming CC value (matching cc_in, or any CC if cc_in is not present) to the new range.
+
+- "nt_st" (Integer, Optional): Semitones to transpose notes.
+
+- "velocity_range" (List [min, max], Optional): Scales the velocity of note_on messages.
+
+- "note_to_cc" (Object, Optional): Transforms a specific note into a CC.
+  
+  - Contains: "note_in", "cc_out", "value_on_note_on", "value_on_note_off", "ch_out_cc", "use_velocity_as_value".
+
+- "note_to_pc" (Object, Optional): Transforms a specific note into a Program Change.
+  
+  - Contains: "note_in", "program_out", "send_on_note_on", "send_on_note_off", "ch_out_pc".
+
+- "aftertouch_to_cc" (Object, Optional): Transforms Channel Aftertouch messages into CCs.
+  
+  - Contains: "cc_out", "ch_out_cc", "value_range".
+
+**Note:** For an exhaustive description of all keys and their behavior, run
 
 ```
-python midimod.py --help.
+python midimod.py --help
 ```
 
-## Ejemplos Detallados de Reglas
+## Detailed Rule Examples
 
-Para ver ejemplos concretos de cómo configurar diferentes tipos de transformaciones y combinaciones, por favor consulta el archivo RULES_EXAMPLES.md.
+To see concrete examples of how to configure different types of transformations and combinations, please refer to the RULES_EXAMPLES.md file.
 
-## Log de Salida en Consola
+## Console Output Log
 
-Cuando midimod está en funcionamiento, los mensajes MIDI procesados se muestran en la consola. El formato general es:
+When midimod is running, processed MIDI messages are displayed in the console. The general format is:
 
-[V] RutaID|IN : ch(C) tipo(N) atr(V) >> [V] RutaID|OUT: ch(C') tipo(N') atr(V')
+[V] RouteID|IN : ch(C) type(N) attr(V) >> [V] RouteID|OUT: ch(C') type(N') attr(V')
 
-- [V]: La current_active_version en el momento del procesamiento.
-  
-- RutaID: Identificador de la ruta que procesó el mensaje (ej. R1, R2).
-  
-- IN :: Indica el mensaje MIDI original que entró a la ruta.
-  
-- > > (vacío) Si no hay una parte OUT:, significa que la ruta procesó el mensaje pero no se realizó ninguna transformación.
-  
-- OUT:: Indica el mensaje MIDI después de ser procesado por las transformaciones de esa ruta.
-  
-- ch(C): Canal MIDI (1-16).
-  
-- tipo(N): Tipo de mensaje y nota/CC (ej. note_on(60), cc(10)).
-  
-- atr(V): Atributo relevante y su valor (ej. vel(100), val(64)).
-  
+- [V]: The current_active_version at the time of processing.
 
-Si un único mensaje de entrada es procesado por múltiples rutas (porque comparten el mismo puerto de entrada físico), o si una ruta divide un mensaje en múltiples salidas (ej. con ch_out), verás múltiples líneas >> OUT: bajo una única línea IN :.
+- RouteID: Identifier of the route that processed the message (e.g., R1, R2).
 
-## Solución de Problemas Comunes
+- IN :: Indicates the original MIDI message that entered the route.
 
-- **"Error abriendo puerto..." o "Error enviando mensaje..."**: Usualmente significa que el puerto MIDI está siendo utilizado por otra aplicación (DAW, patchbay virtual, otra instancia de midimod). Cierra todas las demás aplicaciones que puedan usar MIDI.
-  
-- **Dispositivo no detectado**: Ejecuta python midimod.py --list-ports para ver los nombres exactos de tus dispositivos y asegúrate de que las *_device_substring en tu JSON coincidan.
-  
-- **Codificación de Archivos JSON**: Asegúrate de que tus archivos .json estén guardados con codificación UTF-8, especialmente si usas caracteres especiales en los _comment.
-  
+- > >  (empty) If there is no OUT: part, it means the route processed the message but no transformation was performed.
 
-## Contribuciones
+- OUT:: Indicates the MIDI message after being processed by the transformations of that route.
 
-Las sugerencias, reportes de bugs y contribuciones son bienvenidas. Por favor, abre un "Issue" en GitHub para discutir cambios o reportar problemas.
+- ch(C): MIDI Channel (1-16).
 
-## Licencia
+- type(N): Message type and note/CC (e.g., note_on(60), cc(10)).
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo LICENSE para más detalles.
+- attr(V): Relevant attribute and its value (e.g., vel(100), val(64)).
+
+If a single input message is processed by multiple routes (because they share the same physical input port), or if a route splits a message into multiple outputs (e.g., with ch_out), you will see multiple >> OUT: lines under a single IN : line.
+
+## Common Troubleshooting
+
+- **"Error opening port..." or "Error sending message..."**: Usually means the MIDI port is being used by another application (DAW, virtual patchbay, another instance of midimod). Close all other applications that might use MIDI.
+
+- **Device not detected**: Run python midimod.py --list-ports to see the exact names of your devices and ensure the *_device_substring in your JSON match.
+
+- **JSON File Encoding**: Ensure your .json files are saved with UTF-8 encoding, especially if you use special characters in _comment.
+
+## Contributions
+
+Suggestions, bug reports, and contributions are welcome. Please open an "Issue" on GitHub to discuss changes or report problems.
+
+## License
+
+This project is under the MIT License. See the LICENSE file for more details.
