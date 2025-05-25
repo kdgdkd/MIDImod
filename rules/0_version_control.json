@@ -1,0 +1,23 @@
+{
+    "device_alias": {
+        "Keyb": "SL MkII",
+        "Ctrl": "BeatStep",
+        "Synth": "Uno MIDI"
+    },
+    "version_map": [
+        { "device_in": "Ctrl", "ch_in": 0, "event_in": "note_on", "value_1_in": 36, "version_out": 0 },
+        { "device_in": "Ctrl", "ch_in": 0, "event_in": "note_on", "value_1_in": 37, "version_out": 1 },
+        { "device_in": "Ctrl", "ch_in": 0, "event_in": "note_on", "value_1_in": 38, "version_out": "cycle_next" },
+        { "device_in": "Ctrl", "ch_in": 0, "event_in": "note_on", "value_1_in": 39, "version_out": "cycle_previous" }
+    ],
+    "input_filter": [
+        {
+            "version": 0, "device_in": "Keyb", "ch_in": 0, "event_in": "note",
+            "output": [{ "device_out": "Synth", "channel_out": 0 }]
+        },
+        {
+            "version": 1, "device_in": "Keyb", "ch_in": 0, "event_in": "note",
+            "output": [{ "device_out": "Synth", "channel_out": 1 }]
+        }
+    ]
+}
