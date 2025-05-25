@@ -1,7 +1,0 @@
-{
-    "devices": {
-      "Keyboard": "Arturia KeyStep",      
-      "Drums": "Arturia BeatStep Pro", 
-      "Synth1": "Uno MIDI"  
-    }
-}
