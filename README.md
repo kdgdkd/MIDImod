@@ -1,208 +1,463 @@
-# MIDImod: MIDI Transformations
+# MIDImod: Advanced MIDI Processing and Creative Control
 
+MIDImod is a Python tool for musicians and producers who want to take full command of their MIDI data. It lets you intercept, creatively transform, and precisely reroute MIDI messages between your hardware and software instruments and controllers – all in real time. You define how MIDImod works using simple JSON text files, giving you powerful control without needing to be a coding expert.
 
-`midimod.py` is a Python script to intercept, transform, and redirect MIDI messages in real-time between different devices. It allows for deep customization through JSON configuration files, offering functionalities like device connection, channel remapping, note transposition, Control Change (CC) transformation, note to CC/PC conversion, and a system of rule "versions" (presets) that can be changed dynamically during execution.
+Think of MIDImod as a smart, customizable MIDI patchbay and processor, sitting at the heart of your setup.
 
-## What is it for
+## What can MIDImod do for you?
 
-MIDImod can be used to manage MIDI between devices connected to a local computer. For example, you can connect a keyboard or a controller to an external synth. But you can also change the channel, the type of signal, the values, etc. You can duplicate incoming notes, and send them to two different devices, or two channels in a multi-timbral device. And you could apply transposition only to the second copy of the secuence, sending notes one octave below, like a sub-bass. You can turn a note button into a shift function button, changing the values sent by the rest of the controls. Or use note buttons to send Control Change or Program Change events (even if your controller "does not send PC"). You could use the velocity or aftertouch to control LFO speed, or cutoff in a synth, while escaling the resulting values into valid ranges. Because of the versions implementation, you could use a controller to change the behaviour of another device that is also connected to the computer (clicking on a button on a controller, I can change the octave of a separate keyboard).
-There are many things that can be done, some may have a practical use and result in better music. 
-Personally, I use it to turn my M-AUDIO XSessionPRO (which is very far from a PRO device), into a smart device. My XSessionPRO is expected to work with mixer software (easy to map), and can only send a predefined set of CCs and notes, all on channel 1; this can't be changed. With MIDImod, I use it to control hardware, sending CC data on different channels, with shift buttons and presets, and is very capable of managing an 8 voices set on an Access Virus TI2. 
+MIDImod helps you overcome common MIDI limitations and explore new creative avenues with your gear. Here are some key things you can achieve:
 
+- **Connect and Route Your Gear:**
+  
+  - Easily link any MIDI keyboard, controller, or sound module to another.
+  
+  - Direct MIDI signals exactly where needed, e.g., keyboard to synth A, pads to synth B.
+  
+  - Change MIDI channels for incoming or outgoing messages.
 
+- **Shape Melodies and Harmonies (Note Transformations):**
+  
+  - **Transpose:** Shift notes up or down by semitones or octaves.
+  
+  - **Create Layers & Harmonies:** Duplicate a melody to play on another sound or channel, perhaps an octave lower for a bassline, or add a harmony.
+  
+  - **Stay in Key (Scale Quantization):** Make sure your notes always fit a chosen musical scale (e.g., C Major, A Minor Pentatonic).
+  
+  - **Add Randomness:** Introduce controlled random variations to note pitches.
+
+- **Enhance Your Knobs and Faders (Control Change - CC - Manipulation):**
+  
+  - **Remap Controls:** Make one knob control a different parameter (e.g., CC #20 becomes CC #74 for filter control).
+  
+  - **Fine-Tune Control Ranges (Value Scaling):** Adjust how sensitive a knob is, making it cover a wider or narrower range of values.
+  
+  - **Smarter Knob Behavior (cc_type_in):**
+    
+    - **Relative/Encoder Feel:** Make standard knobs act more like endless encoders for smoother changes.
+    
+    - **Accelerated Control (abs_relative):** Small knob turns give fine adjustments, while quick/large turns make bigger changes – useful for performance. Its sensitivity is defined by "threshold" (default 0, meaning always accelerated unless P==C) and "abs2rel_factor" (default 2.0).
+    
+    - **"Catch-up" Mode (abs_catchup):** Avoid sudden sound changes when a knob's physical position doesn't match the current parameter value. The MIDI output only updates when your knob "catches up." Its sensitivity is defined by "threshold" (default 5).
+
+- **New Ways to Control (Event Conversion):**
+  
+  - Use note buttons on your keyboard to send Program Changes or trigger CC messages.
+  
+  - Use how hard you play (velocity) or aftertouch pressure to dynamically control synth parameters.
+
+- **Switch Setups Instantly (Versions - Dynamic Presets):**
+  
+  - Create different MIDI processing setups ("versions").
+  
+  - Use a MIDI note or CC from any controller to instantly switch between these versions – like changing scenes for your whole MIDI rig with one button.
+
+- **Build Complex Interactions (User Variables):**
+  
+  - Store values (like a CC value or note number) in temporary memory slots (var_0 to var_15).
+  
+  - Use these stored values in other rules to create more advanced, conditional MIDI effects.
+
+- **Control Sequencers and Synths (Transport & SysEx):**
+  
+  - Send Play/Stop/Continue to external sequencers or your DAW.
+  
+  - Send specific System Exclusive (SysEx) messages to change patches or detailed settings on your hardware synths.
+
+- **Integrate with Your DAW (Virtual Ports):**
+  
+  - MIDImod can create **virtual MIDI ports** on your computer. This means you can route MIDI from one piece of software (like your DAW – Ableton Live, Logic Pro, etc.), through MIDImod for processing, and then into another piece of software or back into your DAW on a different track. It's like adding a powerful custom MIDI effects processor right into your digital workflow.
+
+- **Combine and Organize (Multiple Rule Files):**
+  
+  - You can **load several rule files at once**. This allows you to keep your configurations modular. For example, one file for your keyboard setup, another for your drum machine, and a third for global controls. MIDImod merges them all together.
+
+MIDImod is designed to be flexible. The configuration is done through simple JSON text files, making it powerful yet accessible.
 
 ## Main Features
 
+- **Device Aliases:** Use easy-to-remember names for your MIDI devices (e.g., "MyKeyboard", "MainSynth").
 
-- **Define Devices by Alias:** Define friendly names (aliases) for your MIDI devices in a global section, and then use these aliases in your routes for greater clarity and ease of maintenance.
-- **Multiple Routing:** Define multiple processing "routes," each connecting a MIDI input device (identified by alias or substring) to an output device. A single input device can feed multiple routes, and multiple routes can send to a single output device.
-- **Sequential Processing:** Within each route, transformations are applied in the order they are defined in the JSON file. The output of one transformation is the input of the next.
-- **Detailed Transformations:**
-  - Channel Change (`ch_in`, `ch_out`).
-  - Note Transposition (`nt_st`).
-  - Control Change Remapping (`cc_in`, `cc_out`).
-  - CC Range Scaling (`cc_range`).
-  - Note Velocity Scaling (`velocity_range`).
-  - Note to CC Conversion (`note_to_cc`), including an option to use note velocity as CC value.
-  - Note to Program Change Conversion (`note_to_pc`).
-  - Aftertouch to CC Conversion (`aftertouch_to_cc`), with optional value scaling.
-- **Rule Version System (Presets):**
-  - Define different behaviors for your transformations using the `"version"` key (an integer or a list of integers).
-  - Rules without the `"version"` key within a route always apply (regardless of the active version for that route).
-  - Change the global `current_active_version` dynamically via:
-    - **Keyboard:** Numeric keys (0-9) for direct selection, Spacebar to cycle (the console window must have focus).
-    - **MIDI:** Configure `version_midi_map` (route-specific) for specific MIDI messages to select a version or perform cycle actions (e.g., `"note_on note=60 channel=0": 1`, `"note_on note=108": "cycle"`).
-- **Interactive Rule File Selector:** If run without specifying rule files, `midimod` presents a console interface to select and sort the rule files to load from the `rules/` folder.
-- **Real-time Logging:** Displays input MIDI messages and their corresponding outputs (if a route and its rules acted on the message) in the console, indicating the active version and route identifier.
-- **Centralized JSON Configuration:** All logic for device definition, routing, and transformation is defined in external JSON files.
+- **Clear Rule Structure:** Define "filters" that react to specific incoming MIDI messages.
 
+- **Multiple Outputs:** A single incoming MIDI message can trigger several different outgoing messages or actions (using the "output": [{...}, {...}] list structure). If a filter has only one simple output action, you can define it directly within the filter.
 
-## Prerequisites
+- **Global Versions:** Switch between entire sets of rules (versions) using a MIDI command.
 
+- **JSON Configuration:** All settings and rules are stored in human-readable JSON text files.
+
+- **Real-time Monitor:** See incoming and outgoing MIDI messages in your console, so you know exactly what's happening.
+
+- **Interactive Rule File Selector:** If you don't specify a rule file when starting, MIDImod offers a simple menu to choose and order multiple files.
+
+- **Virtual MIDI Ports:** Connect MIDImod to other software on your computer using virtual MIDI ports.
+
+## Requirements
 
 - Python 3.7 or higher.
-- Python libraries: `mido`, `python-rtmidi`, `prompt_toolkit`.
 
-
+- Python libraries: mido, python-rtmidi, prompt_toolkit.
 
 ### Installing Dependencies
 
+Open your computer's terminal or command line interface and type:  
+pip install mido python-rtmidi prompt-toolkit
 
-You can install all necessary libraries using `pip`, the Python package manager. Open your terminal or command line and run:
-
-
-**pip install mido python-rtmidi prompt-toolkit**
-
-**Note for Linux users:** Sometimes, for python-rtmidi, you might need to install some ALSA development dependencies (e.g., libasound2-dev on Debian/Ubuntu systems).
+(Note for Linux users: You might need to install system packages like libasound2-dev (on Debian/Ubuntu) for python-rtmidi to work correctly.)
 
 ## Usage
 
-midimod.py is run from the command line.
+Run midimod.py from your terminal or command line.
 
-**Syntax:**
-
-```
+**Basic Syntax:**  
 python midimod.py [rule_file_name_1] [rule_file_name_2] [...] [options]
-```
 
-- **[rule_file_name_...]**: (Optional) Names of the rule files (without the .json extension) to load from the rules/ subfolder. If omitted, an interactive selector will open. Routes defined in multiple files are combined.
+- **[rule_file_name_...]**: (Optional) The names of your rule files (without the .json extension). These files should be in a subfolder named rules_new/. If you don't provide any, MIDImod will show an interactive selector where you can choose and order multiple files.
 
 - **Options:**
   
-  - --list-ports: Lists detected MIDI input and output devices and exits.
+  - --list-ports: Shows a list of all MIDI input and output devices connected to your computer and then exits.
   
-  - --help: Displays detailed help information on usage and the structure of rule files.
-
-**Execution Examples:**
-
-- **Use the interactive selector:**
+  - --virtual-ports: Activates virtual MIDI port mode. MIDImod will create an input port (default: MIDImod_IN) and an output port (default: MIDImod_OUT) that other software can connect to.
   
-  ```
+  - --vp-in YOUR_INPUT_NAME, --vp-out YOUR_OUTPUT_NAME: Lets you specify custom names for the virtual MIDI ports.
+  
+  - --no-log: Starts MIDImod without showing the real-time MIDI message monitor in the console.
+  
+  - --help: Displays detailed help information and all available options.
+
+**Examples of How to Run MIDImod:**
+
+- **Using the interactive selector to choose rule files:**  
   python midimod.py
-  ```
-  
-  (Navigate with arrow keys, mark/unmark with Space, confirm with Enter).
 
-- **Load a specific rule file:**
-  
-  ```
-  python midimod.py virus play
-  ```
-  
-  (Will load rules/virus.json and rules/play.json).
+- **Loading specific rule files (e.g., my_setup.json and live_performance.json):**  
+  python midimod.py my_setup live_performance
 
-- **List MIDI ports:**
-  
-  ```
+- **Listing your available MIDI ports:**  
   python midimod.py --list-ports
-  ```
-  
-  
 
 ## Structure of Rule Files (.json)
 
-Rule files must be in JSON format and located in a folder named rules/ in the same directory as midimod.py. A file can contain a single "route" object or a list of "route" objects.
+Your rule files are the heart of MIDImod. They must be in JSON format and live in a folder named rules_new/ located in the same directory as the midimod.py script.
 
-**Main Components of a Route:**
+**Main Sections in a Rule File:**
 
-- **"devices" (Object, Optional):**
+1. **"device_alias" (Object, Optional but Highly Recommended):**
+   
+   - Define short, memorable names (aliases) for your MIDI devices.
+   
+   - Example: { "Keyb": "SL MkII", "Synth": "Uno MIDI", "Pads": "BeatStep" }
+   
+   - MIDImod uses the device_alias section from the first rule file loaded that contains one.
+
+2. **"version_map" (List of Objects, Optional):**
+   
+   - Defines how to change the active "version" using MIDI messages.
+   
+   - Each object is a rule:
+     
+     - "device_in": Alias of the triggering input device.
+     
+     - "ch_in", "event_in", "value_1_in", "value_2_in": Conditions for the trigger.
+     
+     - "version_out": Target version number or "cycle_next" / "cycle_previous".
+
+3. **"input_filter" (List of Objects, Usually Required):**
+   
+   - Your main MIDI processing rules. Each object is a "filter."
+
+**Inside an "input_filter" Object (a single filter):**
+
+- "_comment": (Optional) Your notes.
+
+- "version": (Optional) Activates filter only for specific version(s).
+
+- "device_in": (Required for MIDI-triggered filters) Input device alias.
+
+- "ch_in", "event_in", "value_1_in", "value_2_in": Input message conditions.
+
+- "cc_type_in": (Optional, for event_in: "cc") How to interpret input CCs ("abs", "relative_signed", "relative_2c", "abs_relative", "abs_catchup").
   
-  - Maps friendly alias names (e.g., "MyMainController") to substrings of your actual MIDI device names (e.g., "X-Session Pro").
+  - For "abs_relative": uses "threshold" (default 0) and "abs2rel_factor" (default 2.0).
   
-  - midimod will use the devices section from the **first** rule file (in load order) that contains it.
+  - For "abs_catchup": uses "threshold" (default 5).
 
-- "_comment" (String, Optional): General description of the route. It will be displayed in the rules summary.
-
-- "input_device_substring" (String, Optional): Part of the MIDI input device name. If omitted, the first available input port is used.
-
-- "output_device_substring" (String, Optional): Part of the MIDI output device name. If omitted, the first available output port is used.
-
-- "version_midi_map" (Object, Optional): Maps specific MIDI messages to changes in the current_active_version or cycle actions (e.g., "note_on note=60 channel=0": 1, "note_on note=108": "cycle"). Messages that trigger this are "consumed."
-
-- "transformations" (List of Objects): Defines the transformation rules that are applied sequentially.
-
-- **"routes" (List, Required for processing):**
+- **Output Definition (Two Ways):**
   
-  - Each element is an object defining a processing route.
-
-**Common Keys within a Transformation Object:**
-
-- "_comment" (String, Optional): Describes the transformation.
-
-- "version" (Integer or List of Integers, Optional): The transformation only applies if the current_active_version matches or is in the list. If omitted, the transformation always applies within its route.
-
-- "ch_in" (List of Integers, Optional): Input MIDI channels (0-15) it applies to.
-
-- "ch_out" (List of Integers, Optional): Output MIDI channel(s) (0-15). An empty list [] filters the message.
-
-- "cc_in" (Integer, Optional): Filters by this CC number.
-
-- "cc_out" (Integer, Optional): Changes the CC number to the specified value. If cc_in is present but cc_out is not, the CC number does not change.
-
-- "cc_range" (List [min, max], Optional): Scales the incoming CC value (matching cc_in, or any CC if cc_in is not present) to the new range.
-
-- "nt_st" (Integer, Optional): Semitones to transpose notes.
-
-- "velocity_range" (List [min, max], Optional): Scales the velocity of note_on messages.
-
-- "note_to_cc" (Object, Optional): Transforms a specific note into a CC.
+  1. **For a single, simple output action directly in the filter:**
+     
+     - "device_out": (Optional) Output device alias.
+     
+     - "channel_out", "event_out", "value_1_out", "value_2_out": Output parameters.
+     
+     - "cc_type_out", "sysex_data", variable assignments ("var_0": ...).
   
-  - Contains: "note_in", "cc_out", "value_on_note_on", "value_on_note_off", "ch_out_cc", "use_velocity_as_value".
+  2. **For multiple output actions, or more complex structuring, use an "output" list:**
+     
+     - "output": (List of Objects) Each object defines an output action with the same keys as above ("device_out", "channel_out", etc.).
 
-- "note_to_pc" (Object, Optional): Transforms a specific note into a Program Change.
+**Key Output Parameters (whether direct or in "output" list):**
+
+- "device_out": (Optional) Output device.
+
+- "channel_out": (Optional) Output channel. Inherits from input if not set.
+
+- "event_out": (Optional) Output event type. Inherits from input.
+
+- "value_1_out": (Optional) Output note, CC num, PC num. Inherits. Can be number, expression (e.g., "value_1_in + 12"), or "random(min, max)".
+
+- "value_2_out": (Optional) Output velocity, CC value. Inherits. Can be number, expression.
+
+- "cc_type_out": (Optional, for event_out: "cc") Output CC format.
+
+- "sysex_data": (For event_out: "sysex") List of data bytes (script adds F0/F7).
+
+- Variable Assignment: e.g., "var_0": 100. (Access with var_0...var_15).
+
+- Advanced Value Transformations (for value_1_out, value_2_out):
   
-  - Contains: "note_in", "program_out", "send_on_note_on", "send_on_note_off", "ch_out_pc".
-
-- "aftertouch_to_cc" (Object, Optional): Transforms Channel Aftertouch messages into CCs.
+  - Range Scaling: { "scale_value": "source", "range_in": [min,max], "range_out": [min,max] }
   
-  - Contains: "cc_out", "ch_out_cc", "value_range".
+  - Note-to-Scale: { "scale_notes": {"scale_value": "note_var", "scale_root": num, "scale_type": "name"} }
 
-**Note:** For an exhaustive description of all keys and their behavior, run
+**Variables in Output Expressions:**  
+channel_in, value_1_in, value_2_in (input CC value after cc_type_in), delta_in (physical CC change), event_in, cc_type_in, cc_val2_saved (last sent value for output CC/ch), and var_0...var_15.
+
+## Simple Rule File Examples
+
+Using simplified JSON where possible. Remember to adapt "device_alias" to your gear.  
+**Common "device_alias" block for these examples:**
 
 ```
-python midimod.py --help
+{
+    "device_alias": {
+        "MyKeyboard": "PART_OF_YOUR_KEYBOARD_NAME",
+        "MyController": "PART_OF_YOUR_CONTROLLER_NAME",
+        "MySynth": "PART_OF_YOUR_SYNTH_NAME"
+    }
+}
 ```
 
-## Detailed Rule Examples
+content_copydownload
 
-To see concrete examples of how to configure different types of transformations and combinations, please refer to the RULES_EXAMPLES.md file.
+Use code [with caution](https://support.google.com/legal/answer/13505487).Json
 
-## Console Output Log
+---
 
-When midimod is running, processed MIDI messages are displayed in the console. The general format is:
+**1. connect_keyboard_to_synth.json** (Direct Connection)  
+Purpose: Everything from MyKeyboard goes to MySynth.
 
-[V] RouteID|IN : ch(C) type(N) attr(V) >> [V] RouteID|OUT: ch(C') type(N') attr(V')
+```
+{
+    "device_alias": { "MyKeyboard": "KB_NAME", "MySynth": "SYNTH_NAME" },
+    "input_filter": [
+        {
+            "device_in": "MyKeyboard",
+            "device_out": "MySynth"
+        }
+    ]
+}
+```
 
-- [V]: The current_active_version at the time of processing.
+---
 
-- RouteID: Identifier of the route that processed the message (e.g., R1, R2).
+**2. change_keyboard_channel.json**  
+Purpose: MyKeyboard channel 1 (ch_in: 0) output to MySynth channel 5 (channel_out: 4).
 
-- IN :: Indicates the original MIDI message that entered the route.
+```
+{
+    "device_alias": { 
+        "MyKeyboard": "YourKeyboardName", 
+        "MySynth": "YourSynthName" 
+    },
+    "input_filter": [
+        {
+            "device_in": "MyKeyboard", 
+            "ch_in": 0,
+            "device_out": "MySynth", 
+            "channel_out": 4
+        }
+    ]
+}
+```
 
-- (empty) If there is no OUT: part, it means the route processed the message but no transformation was performed.
+---
 
-- OUT:: Indicates the MIDI message after being processed by the transformations of that route.
+**3. transpose_octave.json**  
+Purpose: Notes from MyKeyboard (Ch 1) sent to MySynth (Ch 1) one octave higher.
 
-- ch(C): MIDI Channel (1-16).
+```
+{
+    "device_alias": { "MyKeyboard": "KB_NAME", 
+                      "MySynth": "SYNTH_NAME" },
+    "input_filter": [
+        {
+            "device_in": "MyKeyboard", 
+            "ch_in": 0, 
+            "event_in": "note",
+            "device_out": "MySynth", 
+            "value_1_out": "value_1_in + 12"
+        }
+    ]
+}
+```
 
-- type(N): Message type and note/CC (e.g., note_on(60), cc(10)).
+---
 
-- attr(V): Relevant attribute and its value (e.g., vel(100), val(64)).
+**4. knob_controls_another_cc.json**  
+Purpose: CC #20 from MyController (Ch 1) becomes CC #74 on MySynth (Ch 1).
 
-If a single input message is processed by multiple routes (because they share the same physical input port), or if a route splits a message into multiple outputs (e.g., with ch_out), you will see multiple >> OUT: lines under a single IN : line.
+```
+{
+    "input_filter": [
+        {
+            "device_in": "MyController", 
+            "ch_in": 0, "event_in": "cc", 
+            "value_1_in": 20,
+            "device_out": "MySynth", 
+            "value_1_out": 74
+            /* value_2_out (CC value) will be inherited from input if not specified */
+        }
+    ]
+}
+```
 
-## Common Troubleshooting
+---
 
-- **"Error opening port..." or "Error sending message..."**: Usually means the MIDI port is being used by another application (DAW, virtual patchbay, another instance of midimod). Close all other applications that might use MIDI.
+**5. note_changes_program.json**  
+Purpose: Middle C (note 60) on MyKeyboard (Ch 1) sends Program Change #5 to MySynth (Ch 1).
 
-- **Device not detected**: Run python midimod.py --list-ports to see the exact names of your devices and ensure the *_device_substring in your JSON match.
+```
+{
+    "input_filter": [
+        {
+            "device_in": "MyKeyboard", 
+            "ch_in": 0, 
+            "event_in": "note_on", 
+            "value_1_in": 60,
+            "device_out": "MySynth", 
+            "event_out": "pc", 
+            "value_1_out": 5
+        }
+    ]
+}
+```
 
-- **JSON File Encoding**: Ensure your .json files are saved with UTF-8 encoding, especially if you use special characters in _comment.
+---
+
+## Advanced Examples
+
+**6. layers_and_scales_by_version.json**  
+Purpose: Use MyController to switch MyKeyboard between a layer and scale quantization.
+
+```
+{
+    "device_alias": { "MyKeyboard": "KB", "MyController": "CTRL", "MySynth": "SYNTH" },
+    "version_map": [
+        { "device_in": "MyController", "ch_in": 0, "event_in": "note_on", "value_1_in": 36, "version_out": 0 },
+        { "device_in": "MyController", "ch_in": 0, "event_in": "note_on", "value_1_in": 37, "version_out": 1 }
+    ],
+    "input_filter": [
+        {
+            "version": 0, "device_in": "MyKeyboard", "ch_in": 0, "event_in": "note",
+            "output": [ /* Multiple outputs require the "output" list */
+                { "device_out": "MySynth", "channel_out": 0 },
+                { "device_out": "MySynth", "channel_out": 1, "value_1_out": "value_1_in - 12" }
+            ]
+        },
+        {
+            "version": 1, "device_in": "MyKeyboard", "ch_in": 0, "event_in": "note",
+            "device_out": "MySynth", "channel_out": 2, /* Single output can be direct */
+            "value_1_out": { "scale_notes": {"scale_value": "value_1_in", "scale_root": 60, "scale_type": "major"}}
+        }
+    ]
+}
+```
+
+---
+
+**7. advanced_cc_control_and_variables.json**  
+Purpose: Accelerated CC, storing CC value to a variable, using variable in another CC.
+
+```
+{
+    "device_alias": { "MyController": "CTRL", "MySynth": "SYNTH" },
+    "input_filter": [
+        { /* Knob with acceleration */
+            "device_in": "MyController", "ch_in": 0, "event_in": "cc", "value_1_in": 20,
+            "cc_type_in": "abs_relative", "abs2rel_factor": 3.0,
+            "device_out": "MySynth", "channel_out": 0, "value_1_out": 74
+        },
+        { /* Knob to store its value in var_0 (no MIDI output from this filter directly) */
+            "device_in": "MyController", "ch_in": 0, "event_in": "cc", "value_1_in": 21,
+            "var_0": "value_2_in" /* Output is just variable assignment */
+        },
+        { /* Knob whose output value is modified by var_0 */
+            "device_in": "MyController", "ch_in": 0, "event_in": "cc", "value_1_in": 22,
+            "device_out": "MySynth", "channel_out": 1, "value_1_out": 70,
+            "value_2_out": "value_2_in + var_0"
+        }
+    ]
+}
+```
+
+---
+
+**8. transport_control_and_sysex.json**  
+Purpose: Pads send Start/Stop and SysEx.
+
+```
+{
+    "device_alias": { "MyPads": "PADS", "MySynth": "SYNTH_A", "MySequencer": "SEQ_OUT"},
+    "input_filter": [
+        { /* Pad sends MIDI Start */
+            "device_in": "MyPads", "ch_in": 9, "event_in": "note_on", "value_1_in": 36,
+            "device_out": "MySequencer", "event_out": "start"
+        },
+        { /* Pad sends MIDI Stop */
+            "device_in": "MyPads", "ch_in": 9, "event_in": "note_on", "value_1_in": 37,
+            "device_out": "MySequencer", "event_out": "stop"
+        },
+        { /* Pad sends a SysEx message */
+            "device_in": "MyPads", "ch_in": 9, "event_in": "note_on", "value_1_in": 40,
+            "device_out": "MySynth", "event_out": "sysex",
+            "sysex_data": [ 0, 32, 41, 2, 18, 116, 0 ]
+        },
+        { /* MIDI Clock passthrough */
+            "device_in": "MyPads", "event_in": "clock",
+            "device_out": "MySequencer"
+        }
+    ]
+}
+```
+
+## Console Monitor
+
+When MIDImod is running, it displays processed MIDI messages:
+
+- [V] IN:[Device] Ch(C) TYPE(VALUE) vel(X) >> [V] OUT:[Device] Ch(C') TYPE'(VALUE') vel(X')
+
+- [V] IN:[Device] Ch(C) TYPE(VALUE) vel(X) >> [NOUT] (filter matched, no MIDI output)
+
+- [*] >> SET: var_X = Y (user variable set)
+
+**Breakdown:** [V]: Version, Device: Alias, Ch(C): Channel, TYPE(VALUE): e.g., NT_on(60), CC(20), vel(X)/val(X): Velocity/CC Value.
+
+## Troubleshooting
+
+- **"Error opening port..."**: Another program is using the port. Close other MIDI apps.
+
+- **Device not detected**: Use --list-ports to check names; match them in "device_alias".
+
+- **JSON Errors**: MIDImod will report syntax errors. Use an online JSON validator if needed.
+
+- **Encoding**: Save .json files as UTF-8.
 
 ## Contributions
 
-Suggestions, bug reports, and contributions are welcome. Please open an "Issue" on GitHub to discuss changes or report problems.
+Suggestions & bug reports are welcome! Please open an "Issue" on GitHub.
 
 ## License
 
-This project is under the MIT License. See the LICENSE file for more details.
+MIT License. See LICENSE file.
