@@ -2,8 +2,6 @@
 
 MIDImod is a Python tool for musicians and producers who want to take full command of their MIDI data. It lets you intercept, creatively transform, and precisely reroute MIDI messages between your hardware and software instruments and controllers – all in real time. You define how MIDImod works using simple JSON text files, giving you powerful control without needing to be a coding expert.
 
-Think of MIDImod as a smart, customizable MIDI patchbay and processor, sitting at the heart of your setup.
-
 ## What can MIDImod do for you?
 
 MIDImod helps you overcome common MIDI limitations and explore new creative avenues with your gear. Here are some key things you can achieve:
@@ -34,23 +32,23 @@ MIDImod helps you overcome common MIDI limitations and explore new creative aven
   
   - **Smarter Knob Behavior (cc_type_in):**
     
-    - **Relative/Encoder Feel:** Make standard knobs act more like endless encoders for smoother changes.
+    - **Absolute and Relative Encoders:** Receives, processes and sends absolute and relative control change signals.
     
-    - **Accelerated Control (abs_relative):** Small knob turns give fine adjustments, while quick/large turns make bigger changes – useful for performance. Its sensitivity is defined by "threshold" (default 0, meaning always accelerated unless P==C) and "abs2rel_factor" (default 2.0).
+    - **Accelerated Control (abs_relative):** Avoid sudden sound changes when a knob's physical position doesn't match the current parameter value. abs_relative mode will interpret changes to an absolute encoder as they were increments/decrements coming from a relative encoder.  
     
-    - **"Catch-up" Mode (abs_catchup):** Avoid sudden sound changes when a knob's physical position doesn't match the current parameter value. The MIDI output only updates when your knob "catches up." Its sensitivity is defined by "threshold" (default 5).
+    - **"Catch-up" Mode (abs_catchup):** With similar purpose, the MIDI output only updates when your knob "catches up" with the parameter value. 
 
 - **New Ways to Control (Event Conversion):**
   
   - Use note buttons on your keyboard to send Program Changes or trigger CC messages.
   
-  - Use how hard you play (velocity) or aftertouch pressure to dynamically control synth parameters.
+  - Use how hard you play (velocity) or aftertouch pressure to dynamically control synth parameters. For example, assign the note velocity to open the filter cutoff, producing a Velocity Tracking effect. 
 
 - **Switch Setups Instantly (Versions - Dynamic Presets):**
   
   - Create different MIDI processing setups ("versions").
   
-  - Use a MIDI note or CC from any controller to instantly switch between these versions – like changing scenes for your whole MIDI rig with one button.
+  - Use a MIDI note or CC from any controller to instantly switch between these versions – like changing pages on a controller or scenes for your whole MIDI rig with one button.
 
 - **Build Complex Interactions (User Variables):**
   
@@ -66,7 +64,7 @@ MIDImod helps you overcome common MIDI limitations and explore new creative aven
 
 - **Integrate with Your DAW (Virtual Ports):**
   
-  - MIDImod can create **virtual MIDI ports** on your computer. This means you can route MIDI from one piece of software (like your DAW – Ableton Live, Logic Pro, etc.), through MIDImod for processing, and then into another piece of software or back into your DAW on a different track. It's like adding a powerful custom MIDI effects processor right into your digital workflow.
+  - MIDImod can create **virtual MIDI ports** on your computer. This means you can route MIDI from a controller through a MIDImod port, and read the processed output in any piece of software (like your DAW – Ableton Live, Logic Pro, etc.). It easily adds a powerful custom MIDI effects processor right into your digital workflow.
 
 - **Combine and Organize (Multiple Rule Files):**
   
