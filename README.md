@@ -1,6 +1,6 @@
 # MIDImod: Advanced MIDI Processing and Creative Control
 
-MIDImod is a Python tool for musicians and producers who want to take full command of their MIDI data. It lets you intercept, creatively transform, and precisely reroute MIDI messages between your hardware and software instruments and controllers – all in real time. You define how MIDImod works using simple JSON text files, giving you powerful control without needing to be a coding expert.
+MIDImod is a Python tool for musicians and producers who want to take full command of their MIDI data. It lets you intercept, creatively transform, and precisely reroute MIDI messages between your hardware and software instruments and controllers – all in real time. You define how MIDImod works using simple JSON text files, with simple and flexible structure, giving you powerful control without needing to be a coding expert.
 
 ## What can MIDImod do for you?
 
@@ -450,11 +450,9 @@ When MIDImod is running, it displays processed MIDI messages:
 
 - **JSON Errors**: MIDImod will report syntax errors. Use an online JSON validator if needed.
 
-- **Encoding**: Save .json files as UTF-8.
-
 ## Contributions
 
-Suggestions & bug reports are welcome! Please open an "Issue" on GitHub.
+This code has been written by an amateur musician AND coder. I use MIDImod, it seems work. I am very open to suggestions, comments & bug reports. You can open an "Issue" on GitHub.
 
 ## License
 
