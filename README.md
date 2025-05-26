@@ -452,7 +452,7 @@ When MIDImod is running, it displays processed MIDI messages:
 
 ## Contributions
 
-This code has been written by an amateur musician AND coder. I use MIDImod, it seems work. I am very open to suggestions, comments & bug reports. You can open an "Issue" on GitHub.
+This code has been written by an amateur musician AND coder. I use MIDImod on a headless Raspberry-Pi, which powers my controllers and reroutes/transforms the MIDI; it seems to work. I am very open to suggestions, comments & bug reports. You can open an "Issue" on GitHub.
 
 ## License
 
