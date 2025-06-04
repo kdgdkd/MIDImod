@@ -29,13 +29,28 @@ monitor_active = True
 global_device_aliases = {} 
 cc_value_sent = {}
 cc_value_control = {}
-user_named_vars = {f"var_{i}": 0 for i in range(16)} 
+NUM_USER_VARS = 32 # Define una constante para el número de variables
+user_named_vars = {f"var_{i}": 0 for i in range(NUM_USER_VARS)}
 cc_input_s_state = {}
 active_note_map = {}
 global_version_mappers = []
 # --- Constantes para la activación por versión ---
 DUMMY_MSG_FOR_VERSION_TRIGGER = mido.Message('note_on', channel=0, note=0, velocity=0) 
 DUMMY_PORT_NAME_FOR_VERSION_TRIGGER = "_VERSION_TRIGGER_INTERNAL_"
+
+# ARRAY_SIZE = NUM_USER_VARS 
+ARRAY_SIZE = 16
+named_arrays = {
+    "control": [0] * ARRAY_SIZE,
+    "trans": [0] * ARRAY_SIZE,
+    "offset": [0] * ARRAY_SIZE,
+    "prob": [1.0] * ARRAY_SIZE,
+    "velo": [100] * ARRAY_SIZE,
+    "length": [0] * ARRAY_SIZE,
+    "mute": [0] * ARRAY_SIZE,
+    "factor": [1.0] * ARRAY_SIZE
+}
+
 
 CC_SENT_UNINITIALIZED = -1
 
@@ -151,13 +166,16 @@ def load_rule_file_new_structure(fp: Path):
 
 
 def do_scale_notes(value_to_scale, root_note_midi, scale_type_name, available_scales_dict):
+    # print(f"DEBUG do_scale_notes: IN_NOTE={value_to_scale}, ROOT={root_note_midi}, SCALE_TYPE='{scale_type_name}', AVAILABLE_SCALES_KEYS={list(available_scales_dict.keys())}")
     if not isinstance(value_to_scale, int):
         return value_to_scale 
 
     scale_intervals = available_scales_dict.get(scale_type_name)
     if scale_intervals is None:
+        # print(f"DEBUG do_scale_notes: Scale type '{scale_type_name}' NOT FOUND. Returning original: {value_to_scale}")
         return value_to_scale 
 
+    # print(f"DEBUG do_scale_notes: Using intervals {scale_intervals} for scale '{scale_type_name}'")
     if not scale_intervals: 
         return value_to_scale
 
@@ -207,98 +225,210 @@ def evaluate_expression(expression_str, context_vars_for_eval):
     global user_named_vars
 
     if not isinstance(expression_str, (str, int, float)): return None
-    if isinstance(expression_str, (int, float)): return int(expression_str) # Devuelve números directamente
+    if isinstance(expression_str, (int, float)): return int(expression_str)
 
-    try:
-        return int(expression_str)
+    current_expr_str = str(expression_str)
+
+    try: # Intento 1: ¿Es un string que representa un entero?
+        return int(current_expr_str)
     except ValueError:
         pass 
 
-    random_match = re.match(r"^\s*random\s*\(\s*(.+)\s*,\s*(.+)\s*\)\s*$", str(expression_str), re.IGNORECASE)
+    # Intento 2: ¿Es la función random?
+    random_match = re.match(r"^\s*random\s*\(\s*(.+)\s*,\s*(.+)\s*\)\s*$", current_expr_str, re.IGNORECASE)
     if random_match:
         min_expr_str = random_match.group(1).strip()
         max_expr_str = random_match.group(2).strip()
-
         min_val = evaluate_expression(min_expr_str, context_vars_for_eval)
         max_val = evaluate_expression(max_expr_str, context_vars_for_eval)
-
         if isinstance(min_val, int) and isinstance(max_val, int):
-            if min_val > max_val:
-                min_val, max_val = max_val, min_val
-            try:
-                return random.randint(min_val, max_val)
-            except ValueError as e:
-                print(f"Adv: Error en random(): {e}. Args min='{min_expr_str}'->{min_val}, max='{max_expr_str}'->{max_val}. Usando min_val.")
-                return min_val
-        else:
-            print(f"Adv: Argumentos para random() no evaluaron a enteros. Min_expr='{min_expr_str}'->{min_val}, Max_expr='{max_expr_str}'->{max_val}. Devuelve None.")
-            return None
+            if min_val > max_val: min_val, max_val = max_val, min_val
+            try: return random.randint(min_val, max_val)
+            except ValueError: return min_val 
+        return None # Error en los args de random
     
+    # Preparar contexto para eval()
     public_to_internal_var_map = {
         "channel_in": "ch0_in_ctx", "value_1_in": "value_in_1_ctx",
         "value_2_in": "value_in_2_ctx", "delta_in": "delta_in_2_ctx",
         "cc_val2_saved": "cc_value_sent_ctx", "event_in": "event_type_in_ctx",
         "cc_type_in": "cc_type_in_ctx"
     }
-    
-    eval_locals = {} # Para usar en eval()
-    # Añadir variables de contexto
+    eval_locals = {}
     for public_name, internal_name in public_to_internal_var_map.items():
         if internal_name in context_vars_for_eval:
             eval_locals[public_name] = context_vars_for_eval[internal_name]
-    # Añadir variables de usuario globales
-    for i in range(16):
+    if "version" in context_vars_for_eval: 
+        eval_locals["version"] = context_vars_for_eval["version"]
+    for i in range(len(user_named_vars)):
         var_name_public  = f"var_{i}"
-        if var_name_public in user_named_vars:
-             eval_locals[var_name_public] = user_named_vars[var_name_public]
+        eval_locals[var_name_public] = user_named_vars.get(var_name_public, 0)
+
+
+       
+    def _prob_func(probability_arg):
+        # El argumento podría ser una expresión que evalúa a un float, o un float directo
+        # Necesitamos evaluar el argumento de prob() usando el mismo contexto
+        # Pero cuidado con la recursión infinita si la expresión es "prob(prob(0.5))"
+        # Por simplicidad, asumamos que el argumento a prob() no es otra llamada a prob() o random()
+        
+        # Primero, intentamos evaluar el argumento de prob() si es una cadena
+        p_val = None
+        if isinstance(probability_arg, (int, float)):
+            p_val = float(probability_arg)
+        elif isinstance(probability_arg, str):
+
+            temp_eval_locals_for_arg = eval_locals.copy() 
+        
+            # Intento de evaluar el argumento de prob
+            evaluated_arg = None
+            try:
+                evaluated_arg = eval(str(probability_arg), {"__builtins__": {}}, temp_eval_locals_for_arg)
+            except Exception:
+                # Si la evaluación del argumento falla, no podemos determinar la probabilidad
+                print(f"Adv: No se pudo evaluar el argumento '{probability_arg}' para prob().")
+                return 0 # O algún valor de error/default
             
-    if str(expression_str) in eval_locals:
-        return eval_locals[str(expression_str)] 
-
-    temp_processed_expr_for_math = str(expression_str)
-    
-    sorted_public_vars_in_eval_locals = sorted(
-        [k for k, v in eval_locals.items() if isinstance(v, (int, float))], # Solo claves con valores numéricos
-        key=len,
-        reverse=True
-    )
-
-    for public_var_name in sorted_public_vars_in_eval_locals:
-        # Usar \b para asegurar que se reemplaza la palabra completa
-        temp_processed_expr_for_math = re.sub(
-            r'\b' + re.escape(public_var_name) + r'\b',
-            str(eval_locals[public_var_name]),
-            temp_processed_expr_for_math
-        )
-
-    try:
-        return int(temp_processed_expr_for_math)
-    except ValueError:
-        pass 
-    
-    processed_expr_no_spaces = "".join(temp_processed_expr_for_math.split())
-    if re.fullmatch(r'[\d()+\-*/%]+', processed_expr_no_spaces) and \
-       not re.fullmatch(r'\d+', processed_expr_no_spaces): 
-        try:
-            result = eval(temp_processed_expr_for_math, {"__builtins__": {}}, eval_locals)
-            return int(result)
-        except ZeroDivisionError:
-            print(f"Adv: División por cero en la expresión '{expression_str}' (procesada como '{temp_processed_expr_for_math}'). Devuelve 0.")
+            if isinstance(evaluated_arg, (int, float)):
+                p_val = float(evaluated_arg)
+            else:
+                print(f"Adv: Argumento '{probability_arg}' para prob() no evaluó a un número.")
+                return 0 # O algún valor de error/default
+        else: # Tipo de argumento no soportado para prob
+            print(f"Adv: Tipo de argumento '{type(probability_arg)}' no soportado para prob().")
             return 0
-        except Exception as e:
-            pass 
 
-    if isinstance(expression_str, str):
+        if p_val is not None:
+            return 1 if random.random() < p_val else 0
+        return 0 # Fallback si p_val no se pudo determinar
+
+    eval_locals['prob'] = _prob_func
+
+    def _rand_val_func(min_arg, max_arg):
+        # Similar a _prob_func, necesitamos evaluar los argumentos
+        m_val, M_val = None, None
+        
+        args_to_eval = [min_arg, max_arg]
+        evaluated_args_num = []
+
+        for arg_expr in args_to_eval:
+            val = None
+            if isinstance(arg_expr, int):
+                val = arg_expr
+            elif isinstance(arg_expr, str):
+                try:
+                    # Similar a la evaluación de argumentos de prob
+                    temp_eval_locals_for_arg = eval_locals.copy()
+                    evaluated_arg = eval(str(arg_expr), {"__builtins__": {}}, temp_eval_locals_for_arg)
+                    if isinstance(evaluated_arg, int):
+                        val = evaluated_arg
+                    else:
+                        print(f"Adv: Argumento '{arg_expr}' para rand_val() no evaluó a un entero.")
+                        return 0 # Fallback
+                except Exception:
+                    print(f"Adv: No se pudo evaluar el argumento '{arg_expr}' para rand_val().")
+                    return 0 # Fallback
+            else:
+                 print(f"Adv: Tipo de argumento '{type(arg_expr)}' no soportado para rand_val().")
+                 return 0 # Fallback
+            
+            if val is None: return 0 # Si alguno falla, retornamos
+            evaluated_args_num.append(val)
+
+        if len(evaluated_args_num) == 2:
+            m_val, M_val = evaluated_args_num[0], evaluated_args_num[1]
+            if m_val > M_val: m_val, M_val = M_val, m_val # Asegurar orden
+            try:
+                return random.randint(m_val, M_val)
+            except ValueError: # Si m_val == M_val y hay problemas con randint en algunos casos (aunque no debería)
+                return m_val
+        return 0 # Fallback
+
+    eval_locals['rand_val'] = _rand_val_func
+
+    def _toggle_func(value_arg):
+        # Evaluar el argumento para obtener su valor numérico actual
+        current_val = None
+        if isinstance(value_arg, (int, float)): # Si ya es un número (podría ser 0.0 o 1.0)
+            current_val = int(value_arg)
+        elif isinstance(value_arg, str):
+            try:
+                temp_eval_locals_for_arg = eval_locals.copy()
+                evaluated_arg = eval(str(value_arg), {"__builtins__": {}}, temp_eval_locals_for_arg)
+                if isinstance(evaluated_arg, (int, float, bool)): # Aceptar bool también
+                    current_val = int(evaluated_arg) # Convertir bool a int (True->1, False->0)
+                else:
+                    print(f"Adv: Argumento '{value_arg}' para toggle() no evaluó a un número o booleano.")
+                    return int(value_arg) if isinstance(value_arg, (int,float)) else 0 # Fallback: si no se puede evaluar, intenta convertir el original, o 0
+            except Exception:
+                print(f"Adv: No se pudo evaluar el argumento '{value_arg}' para toggle().")
+                return int(value_arg) if isinstance(value_arg, (int,float)) else 0 # Fallback
+        else:
+            print(f"Adv: Tipo de argumento '{type(value_arg)}' no soportado para toggle().")
+            return 0 # Fallback
+
+        if current_val is None: # Si después de todo no pudimos obtener un valor
+             return 0 # O el valor original del argumento si fuera numérico
+
+        return 1 if current_val == 0 else 0
+
+    eval_locals['toggle'] = _toggle_func
+
+    def _get_var_func(array_name_expr, index_expr):
+        # Evaluar el nombre del array
+        array_name_val = evaluate_expression(array_name_expr, context_vars_for_eval) # Recursión cuidadosa
+        # Evaluar el índice
+        index_val = evaluate_expression(index_expr, context_vars_for_eval) # Recursión cuidadosa
+
+        if isinstance(array_name_val, str) and isinstance(index_val, (int, float)):
+            array_name = array_name_val
+            index = int(index_val)
+
+            if array_name in named_arrays:
+                if 0 <= index < ARRAY_SIZE:
+                    return named_arrays[array_name][index]
+        return 0 # Valor por defecto
+    eval_locals['get_var'] = _get_var_func
+
+
+
+
+    # DEBUG (opcional, pero útil para ver qué se está evaluando)
+    # if "var" in current_expr_str or "if" in current_expr_str:
+    #    print(f"DEBUG EVAL: In='{current_expr_str}', Locals={eval_locals}")
+
+    # Intento 3: ¿Es solo el nombre de una variable conocida?
+    current_expr_str_stripped = current_expr_str.strip()
+    if current_expr_str_stripped in eval_locals:
+        return eval_locals[current_expr_str_stripped]
+
+    # Intento 4: ¿Es una expresión matemática (con o sin variables ya sustituidas)?
+    # Esta parte es para optimizar/manejar expresiones puramente aritméticas.
+    # La lógica de sustitución que tenías para temp_expr_for_arithmetic_check puede ir aquí.
+    # Por brevedad, si no es una variable directa, pasamos al eval general.
+
+    # Intento 5: Evaluar como una expresión Python general (incluye ternarios, aritmética con variables)
+    try:
+        result = eval(current_expr_str, {"__builtins__": {}}, eval_locals)
+        # No convertir a int aquí necesariamente, el llamador puede hacerlo.
+        # Esto permite que la expresión devuelva strings, ints, floats, bools.
+        return result
+    except Exception: # NameError, SyntaxError, etc.
+        pass # Si eval falla, no es una expresión Python válida en este contexto
+
+    # Intento 6: Fallback - si era un string originalmente y nada más funcionó, devolver el string
+    if isinstance(expression_str, str): # expression_str es el input original a la función
         return expression_str.strip()
 
-    # print(f"Dbg: expression '{expression_str}' no pudo ser evaluada a int o string conocido. Devuelve None.")
-    return None # Default si nada de lo anterior funcionó
+    return None # No se pudo interpretar
 
 def format_midi_message_for_log(msg, prefix="", active_version=-1, 
                                 rule_id_source=None, target_port_alias_for_log_output=None,
                                 input_port_actual_name=None, device_aliases_global_map=None):
+    # print(f"DEBUG format_midi_message_for_log received: {msg}")
     if msg.type in ['clock', 'activesense']: 
         return None
+        
     version_prefix = f"[{active_version}] " if active_version != -1 else ""
     port_display_name = ""
     add_filter_id_to_log = True 
@@ -347,33 +477,31 @@ def format_midi_message_for_log(msg, prefix="", active_version=-1,
 def get_evaluated_value_from_output_config(config_value, default_value_if_none, current_eval_context_for_expr, filter_id_for_debug, debug_field_name=""):
     global user_named_vars, active_scales 
 
-    final_value_to_return  = default_value_if_none
-    
-    if isinstance(config_value, dict) and "scale_value" in config_value:
-        var_to_scale_name_public = config_value["scale_value"]
+    # Iniciar con el valor por defecto que se usará si nada más lo modifica
+    final_value_to_return = default_value_if_none 
+    evaluated_successfully = False # Flag para saber si alguna lógica tuvo éxito
+
+    if isinstance(config_value, dict) and "scale_value" in config_value: # Para escalado de RANGO
+        expression_for_scale_value = config_value.get("scale_value") # Renombrado para claridad
         value_source_for_scaling = None
 
-        public_to_internal_map_temp = {
-            "channel_in": "ch0_in_ctx", "value_1_in": "value_in_1_ctx",
-            "value_2_in": "value_in_2_ctx", "delta_in": "delta_in_2_ctx",
-            "val_cc_saved": "cc_value_sent_ctx" 
-        }
+        # Evaluar la expresión que define QUÉ valor escalar
+        # Esta expresión puede ser un nombre de variable, un literal, o una llamada a get_var(), etc.
+        evaluated_scale_input = evaluate_expression(expression_for_scale_value, current_eval_context_for_expr)
 
-        if var_to_scale_name_public in public_to_internal_map_temp:
-            internal_name = public_to_internal_map_temp[var_to_scale_name_public]
-            if internal_name in current_eval_context_for_expr:
-                value_source_for_scaling = current_eval_context_for_expr[internal_name]
-        elif var_to_scale_name_public.startswith("var_") and var_to_scale_name_public in user_named_vars:
-             value_source_for_scaling = user_named_vars[var_to_scale_name_public]
+        if evaluated_scale_input is not None: # Si la expresión evaluó a algo
+            value_source_for_scaling = evaluated_scale_input
+        # Ya no se necesita el 'else' que imprime "Variable no encontrada", porque si evaluate_expression falla,
+        # value_source_for_scaling será None, y el bloque 'if value_source_for_scaling is not None:' no se ejecutará,
+        # lo cual es el comportamiento correcto. Opcionalmente, puedes añadir un log si evaluated_scale_input es None.
 
         if value_source_for_scaling is not None:
             try:
                 input_val_to_scale = int(value_source_for_scaling)
                 min_in, max_in = config_value.get("range_in", [0, 127])
                 min_out, max_out = config_value.get("range_out", [0, 127]) 
-
                 if not (isinstance(min_out, (int,float)) and isinstance(max_out, (int,float))):
-                     print(f"Adv ({filter_id_for_debug}): 'output_range' malformado para {debug_field_name}. Usando default.")
+                     print(f"Adv ({filter_id_for_debug}): 'range_out' malformado para {debug_field_name}.")
                 else:
                     min_in, max_in = int(min_in), int(max_in); min_out, max_out = int(min_out), int(max_out)
                     normalized_val = 0.0
@@ -383,9 +511,10 @@ def get_evaluated_value_from_output_config(config_value, default_value_if_none, 
                         clamped_input = max(min_in, min(max_in, input_val_to_scale))
                         normalized_val = (float(clamped_input) - min_in) / (max_in - min_in)
                     scaled_val = normalized_val * (max_out - min_out) + min_out
-                    final_value = int(round(scaled_val))
-            except (ValueError, TypeError) as e: print(f"Adv ({filter_id_for_debug}): Error escalando {debug_field_name} '{var_to_scale_name_public}': {e}.")
-        else: print(f"Adv ({filter_id_for_debug}): Variable '{var_to_scale_name_public}' para escalado en {debug_field_name} no encontrada. Usando default.")
+                    final_value_to_return = int(round(scaled_val))
+                    evaluated_successfully = True # Se obtuvo un valor
+            except (ValueError, TypeError) as e: print(f"Adv ({filter_id_for_debug}): Error escalando {debug_field_name} '{expression_for_scale_value}': {e}.")
+        else: print(f"Adv ({filter_id_for_debug}): Variable '{expression_for_scale_value}' para escalado en {debug_field_name} no encontrada.")
 
     elif isinstance(config_value, dict) and "scale_notes" in config_value:
         scale_notes_params = config_value["scale_notes"]
@@ -398,12 +527,18 @@ def get_evaluated_value_from_output_config(config_value, default_value_if_none, 
                 val_to_scale_num = evaluate_expression(val_expr, current_eval_context_for_expr)
                 root_note_num = evaluate_expression(root_expr, current_eval_context_for_expr)
                 scale_type_name_str = evaluate_expression(type_expr, current_eval_context_for_expr)
+                
+                # print(f"DEBUG SCALE_PARAMS: val={val_to_scale_num}({type(val_to_scale_num)}), root={root_note_num}({type(root_note_num)}), type='{scale_type_name_str}'({type(scale_type_name_str)})")
 
                 if isinstance(val_to_scale_num, int) and \
                    isinstance(root_note_num, int) and \
                    isinstance(scale_type_name_str, str):
                     calculated_scaled_value  = do_scale_notes(val_to_scale_num, root_note_num, scale_type_name_str, active_scales)
-                    final_value_to_return = calculated_scaled_value
+                    if isinstance(calculated_scaled_value, int): # Asegurar que do_scale_notes devolvió un int
+                        final_value_to_return = calculated_scaled_value
+                        evaluated_successfully = True # Se obtuvo un valor
+                    else:
+                        print(f"Adv ({filter_id_for_debug}): do_scale_notes no devolvió un entero para {debug_field_name}.")
                 else:
                     print(f"Adv ({filter_id_for_debug}): Parámetros inválidos para scale_notes en {debug_field_name}.")
             else:
@@ -411,12 +546,22 @@ def get_evaluated_value_from_output_config(config_value, default_value_if_none, 
         else:
             print(f"Adv ({filter_id_for_debug}): Valor de 'scale_notes' debe ser un diccionario en {debug_field_name}.")
     
-    elif config_value is not None: # Es un valor directo o una expresión string
+    elif config_value is not None: 
         evaluated = evaluate_expression(config_value, current_eval_context_for_expr)
+        
+        # TU DEBUG PRINT (déjalo si es útil para ch_out, pero config_value es lo importante)
+        # if debug_field_name and "Ch" in debug_field_name: 
+        #      print(f"DEBUG GET_EVAL_SIMPLE: For '{debug_field_name}', config_value='{config_value}', evaluated_to={evaluated} (type: {type(evaluated)})")
+        
         if evaluated is not None:
             final_value_to_return = evaluated
+            evaluated_successfully = True # Se obtuvo un valor
     
-    return final_value_to_return 
+    # Si ninguna lógica tuvo éxito en obtener un valor nuevo, final_value_to_return
+    # ya tiene el default_value_if_none que se le pasó a la función.
+    # No es necesario hacer nada más si no evaluated_successfully.
+    return final_value_to_return
+
 
 
 def process_single_output_block(out_conf, i_out_idx, base_context_for_this_output,
@@ -424,6 +569,12 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
                                 device_aliases_g, mido_ports_map_g,
                                 is_virtual_mode_now, virtual_port_out_obj_ref=None, virtual_port_out_name_ref=""):
     global user_named_vars, cc_value_sent, monitor_active, active_note_map 
+
+    # if filter_id_for_debug == "btw_setup3.26": 
+    #     print(f"DEBUG P_S_O_B_INSPECT: Filter='{filter_id_for_debug}', OutputIdx={i_out_idx}, Received out_conf={out_conf}")
+    #     print(f"DEBUG P_S_O_B_KEYS: out_conf keys = {list(out_conf.keys())}")
+    #     channel_out_value_from_json = out_conf.get("channel_out")
+    #     print(f"DEBUG P_S_O_B_KEY_VAL: Value for 'channel_out' = '{channel_out_value_from_json}' (type: {type(channel_out_value_from_json)})")
 
     current_output_eval_context = base_context_for_this_output.copy()
 
@@ -469,57 +620,74 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
 
 
     ch_out_expr = out_conf.get("channel_out", base_context_for_this_output.get('ch0_in_ctx',0))
-    final_ch_out_eval = get_evaluated_value_from_output_config(ch_out_expr, base_context_for_this_output.get('ch0_in_ctx',0), current_output_eval_context, filter_id_for_debug, f"Out.{i_out_idx}.Ch")
+    final_ch_out_eval = get_evaluated_value_from_output_config(
+        ch_out_expr, 
+        base_context_for_this_output.get('ch0_in_ctx',0), 
+        current_output_eval_context, 
+        filter_id_for_debug, f"Out.{i_out_idx}.Ch")
     final_ch_out_clamped = max(0, min(15, int(final_ch_out_eval if isinstance(final_ch_out_eval, (int,float)) else 0)))
+    # print(f"DEBUG P_S_O_B: Filter='{filter_id_for_debug}', OutputIdx={i_out_idx}, CH_OUT_EXPR_VAR='{ch_out_expr}', FROM_JSON_RAW='{out_conf.get('channel_out')}', FINAL_CH_OUT_EVAL={final_ch_out_eval}, FINAL_CH_CLAMPED={final_ch_out_clamped}")
+
+    val1_out_expr = out_conf.get("value_1_out") # Obtener la expresión del JSON, podría ser None
+    default_val1_for_output = base_context_for_this_output.get('value_in_1_ctx', 0) # Default es la nota/valor1 de entrada
+
+    # Si val1_out_expr es None (no está en JSON), usamos el default_val1_for_output directamente
+    # Si val1_out_expr existe, lo evaluamos. Si la evaluación da None, usamos default_val1_for_output.
+    if val1_out_expr is None:
+        evaluated_val1_from_json = default_val1_for_output
+    else:
+        evaluated_val1_from_json = get_evaluated_value_from_output_config(
+            val1_out_expr,
+            default_val1_for_output, # Pasar el default correcto aquí
+            current_output_eval_context,
+            filter_id_for_debug, f"Out.{i_out_idx}.Val1"
+        )
+        if evaluated_val1_from_json is None: # Si la evaluación falló y devolvió None
+            evaluated_val1_from_json = default_val1_for_output
+
+    # Ahora, asegurar que tenemos un entero para final_val1_out_eval
+    try:
+        final_val1_out_eval = int(evaluated_val1_from_json)
+    except (ValueError, TypeError):
+        # Si no se puede convertir (ej. era un string como "virus_minor" devuelto por error),
+        # usar el default_val1_for_output como último recurso.
+        final_val1_out_eval = int(default_val1_for_output)
 
 
-    val1_out_expr = out_conf.get("value_1_out", base_context_for_this_output.get('value_in_1_ctx', 0))
-    is_random_val1_expr = isinstance(val1_out_expr, str) and "random(" in val1_out_expr.lower()
-    
-    final_val1_out_eval = 0
-
+    # --- LÓGICA DE active_note_map (la que te di antes, para listas FIFO) ---
     input_event_type_for_map = base_context_for_this_output.get('event_type_in_ctx')
     original_input_ch_for_map = base_context_for_this_output.get('ch0_in_ctx')
     original_input_val1_for_map = base_context_for_this_output.get('value_in_1_ctx')
 
     if final_event_type_out_str == "note_on":
-        # Para note_on, siempre evaluar la expresión de value_1_out
-        evaluated_val1 = get_evaluated_value_from_output_config(
-            val1_out_expr,
-            original_input_val1_for_map, # Default al valor de entrada original
-            current_output_eval_context,
-            filter_id_for_debug, f"Out.{i_out_idx}.Val1"
-        )
-        final_val1_out_eval = int(evaluated_val1 if isinstance(evaluated_val1, (int, float)) else 0)
-        
-        if (is_random_val1_expr or final_val1_out_eval != original_input_val1_for_map) and \
-           input_event_type_for_map == 'note_on' and \
-           original_input_ch_for_map is not None and original_input_val1_for_map is not None:
-            map_key = (original_input_ch_for_map, original_input_val1_for_map)
-            active_note_map[map_key] = final_val1_out_eval
+        if input_event_type_for_map == 'note_on' and \
+           original_input_ch_for_map is not None and \
+           original_input_val1_for_map is not None:
+            map_key = (original_input_ch_for_map, original_input_val1_for_map, final_ch_out_clamped)
+            if map_key not in active_note_map:
+                active_note_map[map_key] = []
+            active_note_map[map_key].append(final_val1_out_eval)
 
     elif final_event_type_out_str == "note_off":
-        # Para note_off, intentar recuperar la nota mapeada
-        map_key_lookup = (original_input_ch_for_map, original_input_val1_for_map)
-        if map_key_lookup in active_note_map:
-            final_val1_out_eval = active_note_map.pop(map_key_lookup) 
-        else:
-            evaluated_val1 = get_evaluated_value_from_output_config(
-                val1_out_expr,
-                original_input_val1_for_map,
-                current_output_eval_context,
-                filter_id_for_debug, f"Out.{i_out_idx}.Val1 (note_off fallback)"
-            )
-            final_val1_out_eval = int(evaluated_val1 if isinstance(evaluated_val1, (int, float)) else 0)
-    else:
-        evaluated_val1 = get_evaluated_value_from_output_config(
-            val1_out_expr,
-            original_input_val1_for_map,
-            current_output_eval_context,
-            filter_id_for_debug, f"Out.{i_out_idx}.Val1"
-        )
-        final_val1_out_eval = int(evaluated_val1 if isinstance(evaluated_val1, (int, float)) else 0)
+        if input_event_type_for_map == 'note_off' and \
+           original_input_ch_for_map is not None and \
+           original_input_val1_for_map is not None:
+            map_key_lookup = (original_input_ch_for_map, original_input_val1_for_map, final_ch_out_clamped)
+            if map_key_lookup in active_note_map and active_note_map[map_key_lookup]:
+                final_val1_out_eval = active_note_map[map_key_lookup].pop(0)
+                if not active_note_map[map_key_lookup]:
+                    del active_note_map[map_key_lookup]
+            # else:
+                # Si no hay mapeo (ej. la lista se vació o la clave no existía),
+                # final_val1_out_eval (que se calculó antes a partir de la expresión del JSON) se usa.
+                # Esto es importante para que un note_off sin un note_on mapeado aún pueda procesarse
+                # según su propia definición de value_1_out en el JSON.
+                pass
 
+
+
+
+    
 
     if final_event_type_out_str == "control_change":
         cc_num_lookup = int(max(0,min(127, final_val1_out_eval if isinstance(final_val1_out_eval, (int,float)) else 0)))
@@ -550,15 +718,89 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
 
     for key_in_json, expr_assign in out_conf.items():
         if key_in_json.startswith("var_") and key_in_json in user_named_vars:
-            val_assign = get_evaluated_value_from_output_config(expr_assign, 0, current_output_eval_context, filter_id_for_debug, f"Assign.{key_in_json}")
-            if val_assign is not None:
+            val_assign = get_evaluated_value_from_output_config(
+                expr_assign, 
+                None, # Usar None como default si la evaluación falla
+                current_output_eval_context, 
+                filter_id_for_debug, 
+                f"Assign.{key_in_json}"
+            )
+            if isinstance(val_assign, (int, float)):
                 user_named_vars[key_in_json] = int(val_assign)
-                log_pfx = "    V_ASSIGN:" if base_context_for_this_output.get('event_type_in_ctx') == "_version_change" else "[*] >> SET:"
-                if monitor_active: print(f"{log_pfx} {key_in_json} = {user_named_vars[key_in_json]} ['{expr_assign}']")
-            elif monitor_active:
-                log_pfx_f = "    V_ASSIGN_F:" if base_context_for_this_output.get('event_type_in_ctx') == "_version_change" else "      !SET_F:"
-                print(f"{log_pfx_f} {key_in_json} en {filter_id_for_debug} (expr '{expr_assign}' evaluó a None)")
+            elif isinstance(val_assign, str):
+                try:
+                    # Intentar convertir a int si es un string numérico (ej. "60")
+                    user_named_vars[key_in_json] = int(val_assign)
+                except ValueError:
+                    # Si no se puede convertir a int, almacenar como string
+                    user_named_vars[key_in_json] = val_assign 
+            else: # Para otros tipos como booleanos
+                try: user_named_vars[key_in_json] = int(val_assign)
+                except (ValueError, TypeError): user_named_vars[key_in_json] = str(val_assign) # Fallback a string
 
+            # Logueo (opcionalmente muestra el tipo si no es int)
+            # log_pfx = "    V_ASSIGN:" if base_context_for_this_output.get('event_type_in_ctx') == "_version_change" else "[*] >> SET:"
+            # if monitor_active: 
+                # val_display = user_named_vars[key_in_json]
+                # type_display = ""
+                # if not isinstance(val_display, int): # Solo muestra el tipo si NO es int
+                #     type_display = f" (type: {type(val_display).__name__})"
+                # print(f"{log_pfx} {key_in_json} = {val_display}{type_display} ['{expr_assign}']")
+                # print(f"{log_pfx} {key_in_json} = ['{val_display}']")
+            # elif monitor_active:
+                # log_pfx_f = "    V_ASSIGN_F:" if base_context_for_this_output.get('event_type_in_ctx') == "_version_change" else "      !SET_F:"
+                # print(f"{log_pfx_f} {key_in_json} en {filter_id_for_debug} (expr '{expr_assign}' evaluó a None)")
+
+    if "set_var" in out_conf:
+        set_var_actions = out_conf["set_var"]
+        if isinstance(set_var_actions, list):
+            for action_item in set_var_actions:
+                if isinstance(action_item, dict):
+                    array_name_str = action_item.get("name") 
+                    index_expr_str = action_item.get("index")
+                    value_expr_str = action_item.get("value")
+
+                    if array_name_str and index_expr_str is not None and value_expr_str is not None:
+                        # ARRAY_SIZE y named_arrays deben ser accesibles aquí (globales)
+                        if array_name_str in named_arrays:
+                            index_val = evaluate_expression(index_expr_str, current_output_eval_context)
+                            value_to_set_any = evaluate_expression(value_expr_str, current_output_eval_context)
+
+                            if isinstance(index_val, (int, float)) and value_to_set_any is not None:
+                                index = int(index_val)
+                                
+                                if 0 <= index < ARRAY_SIZE: # Usar ARRAY_SIZE global
+                                    try:
+                                        if array_name_str in ["prob", "factor"]:
+                                            final_value = float(value_to_set_any)
+                                        elif array_name_str in ["control", "offset", "velo", "length", "mute"]:
+                                            final_value = int(value_to_set_any)
+                                        else: 
+                                            final_value = value_to_set_any 
+                                        
+                                        named_arrays[array_name_str][index] = final_value
+                                        
+                                        if monitor_active: # Logueo opcional
+                                            print(f"    ARR_ASSIGN: {array_name_str}[{index}] = {final_value} (idx_expr:'{index_expr_str}', val_expr:'{value_expr_str}')")
+                                    except (ValueError, TypeError) as e_conv:
+                                        if monitor_active:
+                                            print(f"Adv ({filter_id_for_debug}): Error convirtiendo valor para {array_name_str}[{index}]: {e_conv}. Valor '{value_to_set_any}'")
+                                else:
+                                    if monitor_active:
+                                        print(f"Adv ({filter_id_for_debug}): Índice '{index}' (de '{index_expr_str}') fuera de rango para array '{array_name_str}'.")
+                            else:
+                                if monitor_active:
+                                     print(f"Adv ({filter_id_for_debug}): No se pudo evaluar índice '{index_expr_str}' o valor '{value_expr_str}' para set_var['{array_name_str}'].")
+                        else:
+                            if monitor_active:
+                                print(f"Adv ({filter_id_for_debug}): Array llamado '{array_name_str}' no encontrado para set_var.")
+                    else:
+                        if monitor_active:
+                            print(f"Adv ({filter_id_for_debug}): Falta 'name', 'index', o 'value' en item de set_var.")
+
+
+
+                            
     target_port_obj_to_use = None
     effective_device_out_alias_for_log = out_dev_alias
     output_msg = None
@@ -573,9 +815,10 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
         for p_name, p_info in mido_ports_map_g.items():
             if p_info["type"] == "out" and out_dev_sub.lower() in p_name.lower():
                 target_port_obj_to_use = p_info["obj"]; break
-        if not target_port_obj_to_use and monitor_active:
-            print(f"      WARN: Puerto OUT '{out_dev_alias}' no encontrado para {filter_id_for_debug}.{i_out_idx}")
+        # if not target_port_obj_to_use and monitor_active:
+        #     print(f"      WARN: Puerto OUT '{out_dev_alias}' no encontrado para {filter_id_for_debug}.{i_out_idx}")
 
+    # print(f"DEBUG P_S_O_B: Filter='{filter_id_for_debug}', OutputIdx={i_out_idx}, CH_OUT_EXPR='{out_conf.get('channel_out', 'inherited')}', FINAL_CH_OUT_EVAL={final_ch_out_eval}, FINAL_CH_CLAMPED={final_ch_out_clamped}")
     if target_port_obj_to_use and final_event_type_out_str:
         # final_val1_out_eval ya está calculado con la lógica de note mapping
         val1_msg = int(final_val1_out_eval) # Asegurar que es int para mido
@@ -778,8 +1021,8 @@ def summarize_active_processing_config(active_filters_list, device_aliases_map, 
                         if k_out_check.startswith("user_var_"): continue
                         if k_out_check == "_comment": continue
                         has_any_midi_param = True; break 
-                    if has_any_midi_param:
-                        print(f"      AVISO: Output sin 'device_out' y sin default en filtro. No se enviará MIDI.")
+                    # if has_any_midi_param:
+                        # print(f"      AVISO: Output sin 'device_out' y sin default en filtro. No se enviará MIDI.")
                 else: # Sí hay un effective_out_dev_alias
                     out_dev_resolved_substring = device_aliases_map.get(effective_out_dev_alias, effective_out_dev_alias)
                     actual_port_name_for_output_display = f"'{out_dev_resolved_substring}' (no abierto/encontrado)"
@@ -833,10 +1076,60 @@ def summarize_active_processing_config(active_filters_list, device_aliases_map, 
             
     print("----------------------------------------------------")
 
+# --- Helper Function para parsear condiciones de valor ---
+def _check_value_condition(condition_config, actual_value):
+    if actual_value is None: return False # No hay valor para comparar
+
+    if isinstance(condition_config, (int, float)):
+        return actual_value == condition_config
+    elif isinstance(condition_config, list):
+        return actual_value in condition_config
+    elif isinstance(condition_config, str):
+        condition_str = condition_config.strip()
+        # Rangos: "min-max"
+        range_match = re.match(r"^\s*(\d+)\s*-\s*(\d+)\s*$", condition_str)
+        if range_match:
+            try:
+                min_val = int(range_match.group(1))
+                max_val = int(range_match.group(2))
+                return min_val <= actual_value <= max_val
+            except ValueError: return False # Malformado
+
+        # Comparaciones: ">X", ">=X", "<X", "<=X", "==X" (==X es redundante pero puede incluirse)
+        comp_match = re.match(r"^\s*(>=|<=|>|<|==)\s*(-?\d+)\s*$", condition_str) # Añadido -? para números negativos
+        if comp_match:
+            operator = comp_match.group(1)
+            try:
+                limit = int(comp_match.group(2))
+                if operator == ">": return actual_value > limit
+                if operator == ">=": return actual_value >= limit
+                if operator == "<": return actual_value < limit
+                if operator == "<=": return actual_value <= limit
+                if operator == "==": return actual_value == limit
+            except ValueError: return False # Malformado
+        
+        # Si no es ninguno de los formatos especiales, y es un string, no coincide (a menos que quieras parsear "eval")
+        return False 
+    return False # Tipo de condición no soportado
+
+
+
 
 def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_dummy, filter_config, current_active_version_global, device_aliases_global, mido_ports_map, is_virtual_mode_now, virtual_out_obj=None, virtual_out_name=""):
     global cc_value_sent, cc_value_control # user_named_vars es accedida por las funciones de output
     # filter_id_for_debug se obtiene de filter_config dentro de execute_all_outputs_for_filter y process_single_output_block
+    if msg_input_port_name_or_dummy != DUMMY_PORT_NAME_FOR_VERSION_TRIGGER and original_msg_or_dummy is None:
+        print(f"ADVERTENCIA: original_msg_or_dummy es None en llamada no-trigger para filtro {filter_config.get('_filter_id_str')}")
+        return []
+    
+    # (El DUMMY_MSG_FOR_VERSION_TRIGGER es note_on, channel=0, note=0, velocity=0)
+    if original_msg_or_dummy.type == 'note_on' and original_msg_or_dummy.velocity == 0:
+        effective_msg_for_context = mido.Message('note_off',
+                                                 channel=original_msg_or_dummy.channel,
+                                                 note=original_msg_or_dummy.note,
+                                                 velocity=0) # Usar 0 para la velocidad del note_off generado
+    else:
+        effective_msg_for_context = original_msg_or_dummy.copy()
     
     is_version_trigger_call = (msg_input_port_name_or_dummy == DUMMY_PORT_NAME_FOR_VERSION_TRIGGER)
 
@@ -875,23 +1168,51 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
 
     # --- Preparar CONTEXTO DE ENTRADA (base_context_for_outputs) ---
     base_context_for_outputs = {}
-    effective_msg_for_context = None # Para saber si cc_value_control debe actualizarse
+    # effective_msg_for_context = None 
 
     if is_version_trigger_call:
-        # Para filtros activados por versión, usamos DUMMY_MSG para poblar el contexto
-        dummy_msg_ref = DUMMY_MSG_FOR_VERSION_TRIGGER 
         base_context_for_outputs = {
-            'ch0_in_ctx': dummy_msg_ref.channel, 
-            'value_in_1_ctx': dummy_msg_ref.note if hasattr(dummy_msg_ref, 'note') else (dummy_msg_ref.control if hasattr(dummy_msg_ref, 'control') else 0), 
-            'value_in_2_ctx': dummy_msg_ref.velocity if hasattr(dummy_msg_ref, 'velocity') else (dummy_msg_ref.value if hasattr(dummy_msg_ref, 'value') else 0), 
-            'delta_in_2_ctx': 0, 
-            'event_type_in_ctx': dummy_msg_ref.type, 
-            'cc_type_in_ctx': "abs"
+            'ch0_in_ctx': effective_msg_for_context.channel,
+            'value_in_1_ctx': getattr(effective_msg_for_context, 'note', getattr(effective_msg_for_context, 'control', 0)),
+            'value_in_2_ctx': getattr(effective_msg_for_context, 'velocity', getattr(effective_msg_for_context, 'value', 0)),
+            'delta_in_2_ctx': 0,
+            'event_type_in_ctx': effective_msg_for_context.type,
+            'cc_type_in_ctx': "abs" # Para DUMMY_MSG, el tipo de CC de entrada no es relevante
         }
-    else: # Procesamiento normal de mensaje MIDI real
-        effective_msg_for_context = original_msg_or_dummy.copy()
-        if effective_msg_for_context.type == 'note_on' and effective_msg_for_context.velocity == 0:
-            effective_msg_for_context.type = 'note_off'
+    else: 
+        ch0_in_ctx = getattr(effective_msg_for_context, 'channel', -1)
+        value_in_1_ctx_real = 0
+        value_in_2_ctx_real = 0
+        delta_in_2_ctx_real = 0
+        event_type_in_ctx_real = effective_msg_for_context.type
+        cc_type_in_filter_config_real = filter_config.get("cc_type_in", "abs").lower()
+
+        if effective_msg_for_context.type == 'control_change':
+            value_in_1_ctx_real = effective_msg_for_context.control
+            cc_ch_input = effective_msg_for_context.channel
+            cc_num_input = effective_msg_for_context.control
+            C_current_abs_input = effective_msg_for_context.value
+        elif event_type_in_ctx_real in ['note_on', 'note_off']: # effective_msg_for_context.type ya está corregido
+            value_in_1_ctx_real = effective_msg_for_context.note
+            value_in_2_ctx_real = effective_msg_for_context.velocity 
+        elif event_type_in_ctx_real == 'program_change':
+            value_in_1_ctx_real = effective_msg_for_context.program
+        elif event_type_in_ctx_real == 'pitchwheel':
+            value_in_1_ctx_real = effective_msg_for_context.pitch
+        elif event_type_in_ctx_real == 'aftertouch':
+            value_in_1_ctx_real = effective_msg_for_context.value
+            # value_in_2_ctx_real permanece 0 o como lo definas
+        elif event_type_in_ctx_real == 'polytouch':
+            value_in_1_ctx_real = effective_msg_for_context.note
+            value_in_2_ctx_real = effective_msg_for_context.value
+        
+        base_context_for_outputs = {
+            'ch0_in_ctx': ch0_in_ctx, 'value_in_1_ctx': value_in_1_ctx_real,
+            'value_in_2_ctx': value_in_2_ctx_real, 'delta_in_2_ctx': delta_in_2_ctx_real,
+            'event_type_in_ctx': event_type_in_ctx_real,
+            'cc_type_in_ctx': cc_type_in_filter_config_real if effective_msg_for_context.type == 'control_change' else "abs"
+        }
+
         
         ch0_in_ctx = getattr(effective_msg_for_context, 'channel', -1)
         value_in_1_ctx_real = 0; value_in_2_ctx_real = 0; delta_in_2_ctx_real = 0
@@ -1016,8 +1337,10 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
     # Estos se aplican SOLO si NO es una llamada de activación por versión.
     if not is_version_trigger_call:
         if "ch_in" in filter_config:
-            ch_cond_raw = filter_config["ch_in"]; ch_list = [ch_cond_raw] if isinstance(ch_cond_raw, int) else ch_cond_raw
-            if not isinstance(ch_list, list) or base_context_for_outputs.get('ch0_in_ctx', -1) not in ch_list: return []
+            ch_cond_config = filter_config["ch_in"]
+            actual_ch = base_context_for_outputs.get('ch0_in_ctx', -1) # Canal es 0-15
+            if not _check_value_condition(ch_cond_config, actual_ch):
+                return []
         if "event_in" in filter_config:
             et_cond = filter_config["event_in"]; et_list = [et_cond] if isinstance(et_cond, str) else et_cond
             if not isinstance(et_list, list): return []
@@ -1028,12 +1351,18 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
             elif "cc" in et_list_lower and input_event_lower == "control_change": matches = True
             elif "pc" in et_list_lower and input_event_lower == "program_change": matches = True
             if not matches: return []
+
+        
         if "value_1_in" in filter_config:
-            v1_cond = filter_config["value_1_in"]; v1_list = [v1_cond] if isinstance(v1_cond, (int,float)) else v1_cond
-            if not isinstance(v1_list, list) or base_context_for_outputs.get('value_in_1_ctx', None) not in v1_list: return []
+            v1_cond_config = filter_config["value_1_in"]
+            actual_v1 = base_context_for_outputs.get('value_in_1_ctx', None)
+            if not _check_value_condition(v1_cond_config, actual_v1):
+                return []
         if "value_2_in" in filter_config:
-            v2_cond = filter_config["value_2_in"]; v2_list = [v2_cond] if isinstance(v2_cond, (int,float)) else v2_cond
-            if not isinstance(v2_list, list) or base_context_for_outputs.get('value_in_2_ctx', None) not in v2_list: return []
+            v2_cond_config = filter_config["value_2_in"]
+            actual_v2 = base_context_for_outputs.get('value_in_2_ctx', None)
+            if not _check_value_condition(v2_cond_config, actual_v2):
+                return []
     
     # Si llegamos aquí, el filtro aplica. Llamar a execute_all_outputs_for_filter.
     generated_outputs_with_meta = execute_all_outputs_for_filter( filter_config, base_context_for_outputs, current_active_version_global, device_aliases_global, mido_ports_map, is_virtual_mode_now, virtual_out_obj, virtual_out_name
@@ -1405,7 +1734,6 @@ For information on the JSON file structure, please refer to README.md.
         
         mido_all_input_names = mido.get_input_names(); mido_all_output_names = mido.get_output_names()
         for sub_or_alias_key, details in required_input_ports_details.items():
-            # ... (tu lógica existente para abrir puertos de input físicos) ...
             port_name_to_open = find_port_by_substring(mido_all_input_names, sub_or_alias_key, "entrada")
             if port_name_to_open:
                 if port_name_to_open not in opened_ports_tracking:
@@ -1418,7 +1746,6 @@ For information on the JSON file structure, please refer to README.md.
             else: print(f"  - [!] IN: Puerto para '{sub_or_alias_key}' no encontrado. {len(details['filters_using_it'])} filtros desactivados.")
 
         for sub_or_alias_key_out, details_out in required_output_ports_details.items():
-            # ... (tu lógica existente para abrir puertos de output físicos) ...
             port_name_to_open_out = find_port_by_substring(mido_all_output_names, sub_or_alias_key_out, "salida")
             if port_name_to_open_out:
                 if port_name_to_open_out not in opened_ports_tracking:
@@ -1430,8 +1757,6 @@ For information on the JSON file structure, please refer to README.md.
             else: print(f"  - [!] OUT Puerto para '{sub_or_alias_key_out}' no encontrado.")
 
     
-    # Filtrar `all_loaded_filters` para obtener `active_filters_final`
-    # Un filtro está activo si su `device_in` corresponde a un puerto de entrada que se pudo abrir.
     active_filters_final = []
     if virtual_port_mode_active: # global virtual_port_mode_active debe estar disponible
         if active_input_handlers:
@@ -1518,8 +1843,8 @@ For information on the JSON file structure, please refer to README.md.
 
                 if original_input_msg: # SOLO SI HAY UN MENSAJE MIDI REAL
                     
-                    if original_input_msg.type == 'clock' and not monitor_active:
-                        continue 
+                    # if original_input_msg.type == 'clock' and not monitor_active:
+                        # continue 
 
                     midi_event_processed_this_loop = True 
                     vmap_consumed_event = False
@@ -1527,9 +1852,19 @@ For information on the JSON file structure, please refer to README.md.
 
                     # --- 1. Procesamiento de Version Mappers Globales ---
                     if global_version_mappers:
-                        msg_copy_for_vmap = original_input_msg.copy() 
-                        if msg_copy_for_vmap.type == 'note_on' and msg_copy_for_vmap.velocity == 0:
-                            msg_copy_for_vmap.type = 'note_off'
+                        # msg_copy_for_vmap = original_input_msg.copy() # Se crea después de la comprobación
+                        
+                        temp_msg_for_vmap_logic = None # Variable temporal para el mensaje a usar en la lógica de vmap
+                        
+                        if original_input_msg.type == 'note_on' and original_input_msg.velocity == 0:
+                            # Crear un NUEVO mensaje note_off
+                            temp_msg_for_vmap_logic = mido.Message('note_off',
+                                                                 channel=original_input_msg.channel,
+                                                                 note=original_input_msg.note,
+                                                                 velocity=0) # O la velocidad que consideres para el note_off
+                        else:
+                            # Usar una copia del mensaje original
+                            temp_msg_for_vmap_logic = original_input_msg.copy()
 
                         for vm_rule in global_version_mappers:
                             rule_match = True 
@@ -1542,13 +1877,13 @@ For information on the JSON file structure, please refer to README.md.
                                 if vm_dev_substr.lower() not in port_full_name.lower():
                                     rule_match = False
                             
-                            if rule_match and "ch_in" in vm_rule and getattr(msg_copy_for_vmap, 'channel', -1) != vm_rule["ch_in"]:
+                            if rule_match and "ch_in" in vm_rule and getattr(temp_msg_for_vmap_logic, 'channel', -1) != vm_rule["ch_in"]:
                                 rule_match = False
                             
                             if rule_match:
                                 vm_event = vm_rule.get("event_in")
                                 if vm_event:
-                                    msg_event = msg_copy_for_vmap.type
+                                    msg_event = temp_msg_for_vmap_logic.type
                                     if vm_event == "note" and msg_event not in ["note_on", "note_off"]: rule_match = False
                                     elif vm_event == "cc" and msg_event != "control_change": rule_match = False
                                     elif vm_event == "pc" and msg_event != "program_change": rule_match = False
@@ -1558,13 +1893,13 @@ For information on the JSON file structure, please refer to README.md.
                             
                             if rule_match and "value_1_in" in vm_rule:
                                 msg_v1 = -1
-                                if msg_copy_for_vmap.type in ['note_on', 'note_off']: msg_v1 = msg_copy_for_vmap.note
-                                elif msg_copy_for_vmap.type == 'control_change': msg_v1 = msg_copy_for_vmap.control
-                                elif msg_copy_for_vmap.type == 'program_change': msg_v1 = msg_copy_for_vmap.program
+                                if temp_msg_for_vmap_logic.type in ['note_on', 'note_off']: msg_v1 = temp_msg_for_vmap_logic.note
+                                elif temp_msg_for_vmap_logic.type == 'control_change': msg_v1 = temp_msg_for_vmap_logic.control
+                                elif temp_msg_for_vmap_logic.type == 'program_change': msg_v1 = temp_msg_for_vmap_logic.program
                                 if msg_v1 != vm_rule["value_1_in"]: rule_match = False
                             
                             if rule_match and "value_2_in" in vm_rule and vm_rule["value_2_in"] is not None:
-                                msg_v2 = getattr(msg_copy_for_vmap, 'velocity', getattr(msg_copy_for_vmap, 'value', -1))
+                                msg_v2 = getattr(temp_msg_for_vmap_logic, 'velocity', getattr(temp_msg_for_vmap_logic, 'value', -1))
                                 if isinstance(vm_rule["value_2_in"], str) and vm_rule["value_2_in"].startswith(">"):
                                     try:
                                         limit = int(vm_rule["value_2_in"][1:])
@@ -1574,41 +1909,84 @@ For information on the JSON file structure, please refer to README.md.
                                     rule_match = False
                             
                             if rule_match:
-                                vmap_consumed_event = True 
-                                action = vm_rule.get("version_out")
-                                version_changed_by_vmap = False 
+                                vmap_consumed_event = True
+                                action_config = vm_rule.get("version_out") # Obtener la configuración original
+                                version_changed_by_vmap = False
                                 
                                 if monitor_active: 
                                     vm_log_src = vm_rule.get('_source_file', 'VMAP') + "." + str(vm_rule.get('_vmap_id_in_file', '?'))
-                                    log_in_vmap = format_midi_message_for_log(original_input_msg, "IN: ", version_before_action,
+                                    # temp_msg_for_vmap_logic fue definido unas líneas antes
+                                    log_in_vmap = format_midi_message_for_log(temp_msg_for_vmap_logic, "IN: ", version_before_action,
                                                                               input_port_actual_name=port_full_name,
                                                                               device_aliases_global_map=global_device_aliases)
-                                    if log_in_vmap: print(f"{log_in_vmap} >> (VMap '{vm_log_src}' -> {action})")
+                                    if log_in_vmap: print(f"{log_in_vmap} >> (VMap '{vm_log_src}' -> Acción: '{action_config}')")
 
                                 prev_version_for_this_action = current_active_version
-                                if isinstance(action, int):
-                                    if action in available_versions and current_active_version != action:
-                                        current_active_version = action
+                                final_action_to_process = None
+
+                                if isinstance(action_config, str):
+                                    # Primero, verificar si es una de las cadenas especiales directamente
+                                    if action_config.lower() in ["cycle", "cycle_next", "cycle_previous"]:
+                                        final_action_to_process = action_config.lower()
+                                    else:
+                                        # Si no, intentar evaluarla como expresión.
+                                        # `evaluate_expression` accede a `user_named_vars` globalmente.
+                                        # Creamos un contexto básico para el mensaje que disparó el vmap,
+                                        # por si la expresión lo necesitara y `evaluate_expression` se adaptara.
+                                        # El `context_vars_for_eval` de `evaluate_expression` espera "ch0_in_ctx", etc.
+                                        
+                                        # Contexto mínimo para `evaluate_expression` (principalmente para las var_#)
+                                        # (El acceso a `channel_in` etc. del mensaje disparador del vmap
+                                        # requeriría un mapeo o adaptación de `evaluate_expression`)
+                                        expression_eval_context = {
+                                            "version": version_before_action 
+                                        }
+                                        
+                                        # (Opcional: si se quiere pasar explícitamente el contexto del mensaje del vmap)
+                                        # expression_eval_context = {
+                                        #    'ch0_in_ctx': getattr(temp_msg_for_vmap_logic, 'channel', -1),
+                                        #    'value_in_1_ctx': getattr(temp_msg_for_vmap_logic, 'note', getattr(temp_msg_for_vmap_logic, 'control', 0)),
+                                        #    'value_in_2_ctx': getattr(temp_msg_for_vmap_logic, 'velocity', getattr(temp_msg_for_vmap_logic, 'value', 0)),
+                                        #    'event_type_in_ctx': temp_msg_for_vmap_logic.type
+                                        # }
+                                        
+                                        evaluated_expr_result = evaluate_expression(action_config, expression_eval_context)
+
+                                        if isinstance(evaluated_expr_result, (int, str)):
+                                            final_action_to_process = evaluated_expr_result
+                                        elif evaluated_expr_result is not None and monitor_active:
+                                            print(f"Adv (VMap): Expr. 'version_out: {action_config}' evaluó a tipo {type(evaluated_expr_result)}. Ignorado.")
+                                        # Si es None (error de evaluación o expresión no válida), final_action_to_process sigue None
+
+                                elif isinstance(action_config, int):
+                                    final_action_to_process = action_config
+
+                                # --- Ahora procesar final_action_to_process ---
+                                if isinstance(final_action_to_process, int):
+                                    if final_action_to_process in available_versions and current_active_version != final_action_to_process:
+                                        current_active_version = final_action_to_process
                                         version_changed_by_vmap = True
-                                elif isinstance(action, str):
-                                    action_lower = action.lower()
+                                elif isinstance(final_action_to_process, str):
+                                    action_lower = final_action_to_process.lower()
                                     current_idx = available_versions.index(current_active_version) if current_active_version in available_versions else -1
                                     
                                     if action_lower in ["cycle", "cycle_next"] and available_versions:
                                         new_version_idx = (current_idx + 1) % len(available_versions)
-                                        if available_versions[new_version_idx] != current_active_version: # Comprobar si realmente cambia
+                                        if available_versions[new_version_idx] != current_active_version:
                                             current_active_version = available_versions[new_version_idx]
                                             version_changed_by_vmap = True
                                     elif action_lower == "cycle_previous" and available_versions:
                                         new_version_idx = (current_idx - 1 + len(available_versions)) % len(available_versions)
-                                        if available_versions[new_version_idx] != current_active_version: # Comprobar si realmente cambia
+                                        if available_versions[new_version_idx] != current_active_version:
                                             current_active_version = available_versions[new_version_idx]
                                             version_changed_by_vmap = True
+                                    elif action_config != final_action_to_process and monitor_active : # Era una expresión que evaluó a una string no reconocida
+                                        print(f"Adv (VMap): Expr. 'version_out: {action_config}' evaluó a string '{final_action_to_process}' no es acción válida. Ignorado.")
                                 
                                 if version_changed_by_vmap: 
                                     print(f"[*] Versión {current_active_version}/{len(available_versions) - 1}")
                                     process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
-                                break 
+                                break # Salir del bucle de vm_rule porque ya se procesó una
                     
                     if vmap_consumed_event:
                         continue 
@@ -1622,48 +2000,55 @@ For information on the JSON file structure, please refer to README.md.
                         )
                         if outputs_from_this_filter:
                             all_generated_output_msgs_meta.extend(outputs_from_this_filter)
-                    
+                 
+                    # --- INICIO DEL BLOQUE QUE DEBES INSERTAR/RESTAURAR ---
+                    # --- BLOQUE DE ENVÍO DE MENSAJES MIDI (FUERA DE if monitor_active) ---
                     if all_generated_output_msgs_meta:
-                        if monitor_active:
-                            log_msg_input_formatted = format_midi_message_for_log(
-                                original_input_msg, prefix="IN: ", active_version=current_active_version, 
-                                input_port_actual_name=port_full_name, device_aliases_global_map=global_device_aliases
-                            )
-                            if log_msg_input_formatted:
-                                if not all_generated_output_msgs_meta:
-                                    print(f"{log_msg_input_formatted} >> [NOUT]")
-                                else:
-                                    print(log_msg_input_formatted)
-                                    for out_m_log, _, alias_log, rule_log, _, _ in all_generated_output_msgs_meta:
-                                        log_msg_output_formatted = format_midi_message_for_log(
-                                            out_m_log, prefix="  >> OUT: ", active_version=current_active_version, 
-                                            rule_id_source=rule_log, target_port_alias_for_log_output=alias_log,
-                                            device_aliases_global_map=global_device_aliases
-                                        )
-                                        if log_msg_output_formatted: print(log_msg_output_formatted)
-                        
-                        for (msg_to_send, dest_port_obj, dest_alias_str, src_filter_id_str, 
+                        for (msg_to_send, dest_port_obj, dest_alias_str, src_filter_id_str,
                              sent_event_type_str, abs_val_for_cc_sent_if_cc) in all_generated_output_msgs_meta:
                             if dest_port_obj and hasattr(dest_port_obj, "send"):
-                                try: 
+                                try:
                                     dest_port_obj.send(msg_to_send)
                                     if sent_event_type_str == 'control_change':
                                         cc_value_sent[(msg_to_send.channel, msg_to_send.control)] = msg_to_send.value
-                                except Exception as e_send: 
+                                except Exception as e_send:
                                     print(f"  ERR SEND: {e_send} (al puerto para '{dest_alias_str}', msg: {msg_to_send})")
+                    # --- FIN DEL BLOQUE DE ENVÍO ---
+                    # --- FIN DEL BLOQUE QUE DEBES INSERTAR/RESTAURAR ---
+
+                    # --- INICIO DEL BLOQUE DE LOGGING (DENTRO DE if monitor_active) ---
+                    if monitor_active:
+                        # Primero, intentar loguear el mensaje de entrada
+                        log_msg_input_formatted = None
+                        if original_input_msg: # Solo si hay un mensaje de entrada
+                            log_msg_input_formatted = format_midi_message_for_log(
+                                original_input_msg, prefix="IN: ", active_version=current_active_version,
+                                input_port_actual_name=port_full_name, device_aliases_global_map=global_device_aliases
+                            )
+                            if log_msg_input_formatted:
+                                print(log_msg_input_formatted)
+                            elif original_input_msg.type == 'clock' and all_generated_output_msgs_meta:
+                                # Si la entrada fue un clock que generó salidas, imprimir una cabecera para los OUT
+                                print(f"[{current_active_version}] IN:[{port_full_name}] Clock (generó lo siguiente):")
+
+                        # Luego, si hay mensajes de salida, loguearlos
+                        if all_generated_output_msgs_meta:
+                            for out_m_log, _, alias_log, rule_log, _, _ in all_generated_output_msgs_meta:
+                                log_msg_output_formatted = format_midi_message_for_log(
+                                    out_m_log, prefix="  >> OUT: ", active_version=current_active_version,
+                                    rule_id_source=rule_log, target_port_alias_for_log_output=alias_log,
+                                    device_aliases_global_map=global_device_aliases
+                                )
+                                if log_msg_output_formatted: print(log_msg_output_formatted)
+                        # Si no hubo salidas Y el input era logueable (y no era clock que ya imprimió cabecera)
+                        elif log_msg_input_formatted: # Implica que original_input_msg existía y no era clock/activesense
+                            print(f"{log_msg_input_formatted} >> [NOUT]")
+                    # --- FIN DEL BLOQUE DE LOGGING ---
                 # else: original_input_msg era None
+
 
             if not midi_event_processed_this_loop and not kb_char_processed_this_loop:
                 time.sleep(0.001)
-
-
-
-
-
-
-
-
-
 
     except KeyboardInterrupt:
         if not shutdown_flag: shutdown_flag=True # Asegurar que el flag se setea
