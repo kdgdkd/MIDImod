@@ -456,4 +456,4 @@ This code has been written by an amateur musician AND coder. I use MIDImod on a 
 
 ## License
 
-MIT License. See LICENSE file.
+MIT License. See LICENSE file.too
