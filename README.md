@@ -457,50 +457,6 @@ To change the value of a user variable, use its name as a key inside an "output
 - If this block has no "device_out", its only purpose is to modify the variables without sending any MIDI.
   
 
-#### Indexed Arrays (set_var and get_var)
-
-For more complex state management, like storing the value of all 128 CCs for a specific channel, you need indexed arrays. MIDImod provides two special functions for this: set_var and get_var.
-
-- **Channel Arrays:** MIDImod automatically manages internal arrays for you, like ch_1_cc_values, ch_2_cc_values, etc. You don't need to define them.
-  
-- **Sequencer Arrays:** You can also use set_var to modify the arrays of a running sequencer (seq_transpose, seq_gate, etc.) from a midi_filter.
-  
-
-**set_var (Writing to an Array):**
-
-The set_var action is used inside an "output" block to write a value to a specific index in an array.
-
-```
-"output": [{
-    "set_var": {
-        "name": "ch_1_cc_values",
-        "index": 21,
-        "value": "value_2_in"
-    }
-}]
-```
-- "name": The name of the array to modify.
-
-- "index": The position within the array to change (0-based).
-  
-- "value": The new value to store at that index.
-  
-
-**get_var (Reading from an Array):**
-
-The get_var function is used inside any expression to read a value from a specific index in an array.
-
-```
-"if": "get_var('ch_1_cc_values', 21) > 64"
-```
-
-- The first argument is the name of the array to read from.
-  
-- The second argument is the index to read.
-  
-
-This set_var/get_var mechanism is what allows you to create powerful, stateful logic where one control can influence the behavior of another.
-
 #### Expressions and Built-in Functions
 
 All string values for output parameters are processed by Python's eval() function, giving you access to a powerful expression engine. You can perform mathematical operations, use comparisons, and call special built-in helper functions provided by MIDImod:
@@ -557,7 +513,141 @@ For more complex manipulations, MIDImod provides special functions that you us
     
   - scale_type: The name of the scale to use. MIDImod includes over 80 predefined scales, from major and minor to dorian, phrygian_dominant, and pentatonic_blues.
     
+  ### Using Index Functions for Dynamic Values
+
+MIDImod includes powerful helper functions that allow you to dynamically select values from lists using a number or a variable (like a CC value). This is perfect for changing sequencer speeds, arpeggiator modes, or musical scales on the fly.
+
+#### duration_index(index)
+
+This function lets you pick a note duration from a predefined list. The default list includes common values like "1/16", "1/8t" (eighth-note triplet), "1/4", etc.
+
+**Example:** Use a knob (CC #23) to control the step duration of a sequencer.
+
+
+```
+{
+    "device_alias": { "MyController": "BCR2000" },
+    "user_variables": { "seq_speed": "1/16" },
+    "midi_filter": [
+        {
+            "_comment": "CC 23 controls the 'seq_speed' variable.",
+            "device_in": "MyController",
+            "event_in": "cc",
+            "value_1_in": 23,
+            "output": [{
+                "seq_speed": "duration_index(value_2_in)"
+            }]
+        }
+    ],
+    "sequencer": [
+        {
+            "seq_id": "dynamic_speed_seq",
+            "step_duration": "seq_speed" // The step_duration reads from our variable
+        }
+    ]
+}
+```
+
+
+- **How it works:** Turning the knob sends a CC value (0-127). The duration_index(value_2_in) function uses this value as an index to pick a duration from its internal list. The result (e.g., "1/8") is then stored in the seq_speed variable, which the sequencer reads to change its speed.
+
+#### scale_number(index)
+
+This function works similarly but selects a scale name from the list of all available scales (both predefined and user-defined).
+
+**Example:** Use a knob to change the scale used for note quantization.
+
+
+
+```
+{
+    "device_alias": { "MyController": "BCR2000", "MyKeyboard": "Keystation" },
+    "user_variables": { "current_scale": "major" },
+    "midi_filter": [
+        {
+            "_comment": "CC 24 selects the active scale.",
+            "device_in": "MyController",
+            "event_in": "cc",
+            "value_1_in": 24,
+            "output": [{
+                "current_scale": "scale_number(value_2_in)"
+            }]
+        },
+        {
+            "_comment": "Quantize keyboard input to the selected scale.",
+            "device_in": "MyKeyboard",
+            "event_in": "note",
+            "value_1_out": {
+                "scale_notes": {
+                    "scale_value": "value_1_in",
+                    "scale_root": 60,
+                    "scale_type": "current_scale" // Reads the scale name from our variable
+                }
+            }
+        }
+    ]
+}
+```
+
+
+- **How it works:** As you turn the knob, scale_number(value_2_in) picks a scale name (like "dorian", "pentatonic_minor", etc.) and stores it in the current_scale variable. The note quantizer then uses this variable to determine which scale to apply.
+
+#### Customizing the Lists
+
+You can define your own ordered lists for durations and scales within any rule file using the keys "duration_list" and "scale_list". If these are present, the index functions will use your custom lists instead of the defaults, giving you precise control over the available options.
+
+```
+{
+    "duration_list": ["1/32", "1/16", "1/8", "1/4"],
+    "scale_list": ["major", "minor_natural", "pentatonic_minor", "phrygian_dominant"]
+}
+```
+
+#### Indexed Arrays (set_var and get_var)
+
+For more complex state management, like storing the value of all 128 CCs for a specific channel, you need indexed arrays. MIDImod provides two special functions for this: set_var and get_var.
+
+- **Channel Arrays:** MIDImod automatically manages internal arrays for you, like ch_1_cc_values, ch_2_cc_values, etc. You don't need to define them.
   
+- **Sequencer Arrays:** You can also use set_var to modify the arrays of a running sequencer (seq_transpose, seq_gate, etc.) from a midi_filter.
+  
+
+**set_var (Writing to an Array):**
+
+The set_var action is used inside an "output" block to write a value to a specific index in an array.
+
+```
+"output": [{
+    "set_var": {
+        "name": "ch_1_cc_values",
+        "index": 21,
+        "value": "value_2_in"
+    }
+}]
+```
+- "name": The name of the array to modify.
+
+- "index": The position within the array to change (0-based).
+  
+- "value": The new value to store at that index.
+  
+
+**get_var (Reading from an Array):**
+
+The get_var function is used inside any expression to read a value from a specific index in an array.
+
+```
+"if": "get_var('ch_1_cc_values', 21) > 64"
+```
+
+- The first argument is the name of the array to read from.
+  
+- The second argument is the index to read.
+  
+
+This set_var/get_var mechanism is what allows you to create powerful, stateful logic where one control can influence the behavior of another.
+
+
 
 ##### The chord() Function
 
