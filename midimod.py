@@ -932,9 +932,6 @@ def _silence_instance(instance_state, module_type_str=""):
 def _rebuild_sequencer_schedule(seq_index, seq_state):
     global user_variables
 
-    if seq_state.get('pending_note_offs'):
-        _silence_instance(seq_state, f"SEQ[{seq_index}] rebuild")
-
     try:
         seq_conf = seq_state['config']
         eval_context_rebuild = {"version": current_active_version, **user_variables}
@@ -3112,6 +3109,8 @@ MIDImod {script_version} - Command Line & Interactive Controls
 
 
 # --- 3. PROCESAMIENTO DE SECUENCIADORES (LÓGICA FINAL) ---
+# midimod.py
+
             for i, seq_state in enumerate(sequencers_state):
                 if not seq_state.get('is_playing', False):
                     continue
@@ -3121,6 +3120,20 @@ MIDImod {script_version} - Command Line & Interactive Controls
 
                 current_tick = seq_state['tick_counter']
                 cycle_duration = seq_state.get('current_cycle_duration', 0)
+
+                # Si el ciclo ha terminado, reiniciamos contadores y reconstruimos la agenda para el siguiente.
+                if cycle_duration > 0 and current_tick >= cycle_duration:
+                    seq_state['tick_counter'] -= cycle_duration
+                    current_tick = seq_state['tick_counter']
+                    seq_state['last_known_tick'] -= cycle_duration
+                    
+                    adjusted_offs = []
+                    for fire_at, msg, port, alias in seq_state['pending_note_offs']:
+                        adjusted_offs.append((fire_at - cycle_duration, msg, port, alias))
+                    seq_state['pending_note_offs'] = adjusted_offs
+                    
+                    # Reconstruimos la agenda inmediatamente para el nuevo ciclo
+                    _rebuild_sequencer_schedule(i, seq_state)
 
                 # Procesar Note Offs pendientes
                 due_note_offs = [item for item in seq_state['pending_note_offs'] if current_tick >= item[0]]
@@ -3138,31 +3151,11 @@ MIDImod {script_version} - Command Line & Interactive Controls
 
                 # Disparar eventos de la agenda
                 schedule = seq_state.get('event_schedule', [])
-                fired_event_in_loop = False
-                while schedule and schedule[0]['fire_at'] <= current_tick:
-                    event_to_fire = schedule.pop(0)
-                    
-                    # Solo disparamos si el evento es "nuevo" (posterior al último que sonó)
-                    if event_to_fire['fire_at'] > seq_state['last_known_tick']:
+                for event_to_fire in schedule:
+                    if event_to_fire['fire_at'] <= current_tick and event_to_fire['fire_at'] > seq_state['last_known_tick']:
                         seq_state['active_step'] = event_to_fire['step']
                         process_sequencer_step(i, seq_state, event_to_fire['fire_at'], opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
                         seq_state['last_known_tick'] = event_to_fire['fire_at']
-                        fired_event_in_loop = True
-
-                # Si la agenda se ha vaciado, hemos completado el ciclo.
-                if not schedule and fired_event_in_loop and cycle_duration > 0:
-                    # Ajustamos los contadores para el siguiente ciclo.
-                    seq_state['tick_counter'] -= cycle_duration
-                    seq_state['last_known_tick'] -= cycle_duration
-                    
-                    # Ajustamos los tiempos de los note-offs pendientes.
-                    adjusted_offs = []
-                    for fire_at, msg, port, alias in seq_state['pending_note_offs']:
-                        adjusted_offs.append((fire_at - cycle_duration, msg, port, alias))
-                    seq_state['pending_note_offs'] = adjusted_offs
-
-                    # Marcamos para reconstruir la agenda para el próximo ciclo.
-                    seq_state['schedule_needs_rebuild'] = True
 
 
 
