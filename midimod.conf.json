@@ -1,0 +1,16 @@
+// midimod.conf.json
+{
+    "osc_configuration": {
+      "receive": {
+        "ip": "127.0.0.1",
+        "port": 9000 // Puerto donde MIDImod escuchará
+      },
+      // Lo añadimos ya para la segunda parte de la prueba
+      "send_targets": {
+        "test_receiver": {
+          "ip": "127.0.0.1",
+          "port": 9000 // Puerto donde escucha tu script receptor
+        }
+      }
+    }
+  }
