@@ -15,7 +15,7 @@
             "version_out": "cycle"
         }
     ],
-    "input_filter": [
+    "midi_filter": [
         {
             "_comment": "INICIALIZACION",
             "version": 0,
@@ -32,6 +32,10 @@
             "event_in": ["start", "stop", "clock"],
             "output": [{"device_out": "Virus"}]
         },
+
+        {"_comment": "Cambio de version",
+         "device_in": "Uc33", "event_in": "cc", "ch_in": 8, "value_1_in": 123, "value_2_in": 123, "set_version": "cycle"},
+
         {
             "_comment": "V0: Program Change desde Uc33 establece la trasposición general (var_16)",
             "device_in": "Uc33", "event_in": "program_change", "version":0,
@@ -52,6 +56,7 @@
         {"device_in": "Uc33", "event_in": "cc", "ch_in": 8, "value_1_in": 123, "value_2_in": 6, "output": [{"set_var": [{"name": "mute", "index": "5", "value": "toggle(get_var('mute', 5))"}]}]},
         {"device_in": "Uc33", "event_in": "cc", "ch_in": 8, "value_1_in": 123, "value_2_in": 7, "output": [{"set_var": [{"name": "mute", "index": "6", "value": "toggle(get_var('mute', 6))"}]}]},
         {"device_in": "Uc33", "event_in": "cc", "ch_in": 8, "value_1_in": 123, "value_2_in": 8, "output": [{"set_var": [{"name": "mute", "index": "7", "value": "toggle(get_var('mute', 7))"}]}]},
+
         {
             "_comment": "MUTE ALL (pone mutes[0-7] a 1)",
             "device_in": "Uc33", "event_in": "cc", "ch_in": 8, "value_1_in": 123, "value_2_in": 9,

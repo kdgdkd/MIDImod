@@ -1,0 +1,13 @@
+{
+    "device_alias": {
+        "MyKeyboard": "Your Keyboard Name",
+        "MySynth": "Your Synth Name"
+    },
+    "midi_filter": [
+        {
+            "_comment": "Send Keyboard input to Synth",
+            "device_in": "MyKeyboard",
+            "device_out": "MySynth"
+        }
+    ]
+}

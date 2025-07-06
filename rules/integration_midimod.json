@@ -1,0 +1,6 @@
+{
+    "device_alias": {
+      "CLOCK_in": "CLOCK",       
+      "TPT_out": "TPT"    
+    }
+  }
