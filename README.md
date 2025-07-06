@@ -1013,4 +1013,4 @@ This code has been written by an amateur musician AND coder. I use MIDImod on a 
 
 ## License
 
-MIT License. See LICENSE file.too
+under [GNU AGPLv3](https://www.gnu.org/licenses/agpl-3.0.html) license
