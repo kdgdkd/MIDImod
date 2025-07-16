@@ -26,8 +26,11 @@ from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML, to_formatted_text
+# from prompt_toolkit import print_formatted_text # Ya no se usa
 
+# --- TUI Constants ---
+TUI_MSG_TIMEOUT = 1.5
 
 # --- Global Configuration ---
 RULES_DIR_NAME = "rules" 
@@ -42,6 +45,11 @@ cc_value_sent = {}
 cc_value_control = {}
 cc_input_s_state = {}
 
+tui_last_osc_msg_str = ""
+tui_last_osc_msg_time = 0
+tui_app = None
+
+
 # --- OSC Globals ---
 osc_config = {}
 osc_send_clients = {}
@@ -49,6 +57,7 @@ osc_server_thread = None
 osc_server_instance = None
 osc_message_queue = Queue()
 all_loaded_osc_filters = []
+
 
 
 active_note_map = {}
@@ -184,7 +193,7 @@ def clear_reloadable_state():
     """Limpia solo las variables de estado que se recargan desde los ficheros."""
     global global_device_aliases, all_loaded_filters, user_variables, sequencers_state
     global arpeggiator_templates, full_json_contents, active_scales
-    global user_ordered_scale_names, user_ordered_duration_names
+    global user_ordered_scale_names, user_ordered_duration_names, arpeggiator_instances
 
     global_device_aliases = {}
     all_loaded_filters = []
@@ -192,6 +201,7 @@ def clear_reloadable_state():
     user_variables = {}
     sequencers_state = []
     arpeggiator_templates = {}
+    arpeggiator_instances.clear()
     full_json_contents = []
     active_scales = PREDEFINED_SCALES.copy()
     user_ordered_scale_names = []
@@ -278,6 +288,167 @@ def verbose_print(*args, **kwargs):
     if VERBOSE_MODE:
         print(*args, **kwargs)
 
+
+def _update_tui_port_out_data(port_obj, msg, alias_str):
+    """Actualiza la estructura de datos de un puerto para la TUI cuando se envía un mensaje."""
+    if not port_obj or port_obj.closed:
+        return
+    port_name = port_obj.name
+    if port_name in opened_ports_tracking:
+        port_info = opened_ports_tracking[port_name]
+        # Usamos un prefijo mínimo para el log de la TUI
+        port_info["last_out_msg_str"] = format_midi_message_for_log(msg, prefix="")
+        now = time.time()
+        port_info["last_out_msg_time"] = now
+        port_info["activity_time"] = now
+
+# --- TUI Content Generators ---
+
+def _get_tui_status_bar_text():
+    """Genera el texto formateado para la barra de estado superior de la TUI."""
+    global current_active_version, available_versions, midimaster_assumed_status
+    global tui_last_osc_msg_str, tui_last_osc_msg_time
+
+    version_str = f"Versión: {current_active_version}/{len(available_versions) - 1}"
+    transport_str = f"TPT: {midimaster_assumed_status}"
+    
+    osc_str = "OSC: Inactivo"
+    if osc_server_instance:
+        osc_str = "OSC: Escuchando"
+        if time.time() - tui_last_osc_msg_time < TUI_MSG_TIMEOUT:
+            osc_str = f"OSC: {tui_last_osc_msg_str}"
+
+    parts = [
+        f"<style bg='ansiblue' fg='ansiwhite'> MIDImod v1.40 </style>",
+        f"<b>{version_str}</b>",
+        f"<b>{transport_str}</b>",
+        f"<b>{osc_str}</b>"
+    ]
+    # Devuelve directamente FormattedText
+    return to_formatted_text(HTML(" || ".join(parts)))
+
+def _get_tui_ports_panel_text():
+    """Genera el texto para el panel de puertos MIDI."""
+    # Ahora esta función devuelve una lista de objetos FormattedText
+    lines = [] 
+    lines.append(to_formatted_text(HTML("<b>MIDI PORTS         |              IN            |             OUT            |   ACT       </b>")))
+    lines.append(to_formatted_text(HTML("-------------------|----------------------------|----------------------------|-------------")))
+    
+    now = time.time()
+    
+    sorted_ports = sorted(opened_ports_tracking.items(), key=lambda item: (item[1]['type'], item[0]))
+
+    for port_name, port_info in sorted_ports:
+        alias = port_info.get('alias_used', '')
+        display_name = f"{alias[:18]:<18}"
+
+        in_msg = ""
+        if port_info['type'] == 'in' and (now - port_info.get('last_in_msg_time', 0)) < TUI_MSG_TIMEOUT:
+            in_msg = port_info.get('last_in_msg_str') or ''
+        
+        out_msg = ""
+        if (now - port_info.get('last_out_msg_time', 0)) < TUI_MSG_TIMEOUT:
+            out_msg = port_info.get('last_out_msg_str') or ''
+
+        activity_bar = " "
+        if (now - port_info.get('activity_time', 0)) < 0.2: # Actividad muy reciente
+            activity_bar = "<style bg='ansigreen'> </style>" * 10
+        elif (now - port_info.get('activity_time', 0)) < TUI_MSG_TIMEOUT: # Actividad reciente
+            activity_bar = "<style bg='ansiyellow'> </style>" * 3
+
+        line = f"{display_name} | {in_msg[:26]:<26} | {out_msg[:26]:<26} | {activity_bar}"
+        # Cada línea se convierte a FormattedText
+        lines.append(to_formatted_text(HTML(line)))
+        
+    return lines
+
+def _get_tui_modules_panel_text():
+    """Genera el texto para el panel de módulos activos."""
+    num_seq = len(sequencers_state)
+    num_arp = len(arpeggiator_instances)
+    
+    # Ahora esta función devuelve una lista de objetos FormattedText
+    lines = []
+    lines.append(to_formatted_text(HTML(f"<b>MODULES: {num_seq} Seq / {num_arp} Arp</b>")))
+    lines.append(to_formatted_text(HTML("-------------------------------------------------------------------------------------------")))
+    
+    now = time.time()
+
+    for i, seq in enumerate(sequencers_state):
+        seq_id = seq.get('config', {}).get('seq_id', f'SEQ {i}')
+        state = "PLAY" if seq.get('is_playing') else ("ARM" if seq.get('is_armed') else "STOP")
+        
+        activity_bar = ""
+        if seq.get('is_playing') and (now - seq.get('last_fire_time', 0)) < 0.2:
+             activity_bar = "<style bg='ansigreen'> </style>"
+        
+        line = f"{seq_id[:15]:<15} | {state:<4} | {activity_bar}"
+        # Cada línea se convierte a FormattedText
+        lines.append(to_formatted_text(HTML(line)))
+
+    for key, arp in arpeggiator_instances.items():
+        arp_id = f"ARP[{key[0]},{key[1]}]"
+        state = "PLAY" if arp.get('is_playing') else ("ARM" if arp.get('is_armed') else "STOP")
+        notes = len(arp.get('input_notes', []))
+        
+        activity_bar = ""
+        if arp.get('is_playing') and (now - arp.get('last_fire_time', 0)) < 0.2:
+             activity_bar = "<style bg='ansigreen'> </style>"
+
+        line = f"{arp_id[:15]:<15} | {state:<4} | Notas: {notes} {activity_bar}"
+        # Cada línea se convierte a FormattedText
+        lines.append(to_formatted_text(HTML(line)))
+
+    return lines
+
+def _create_tui_layout():
+    """Crea el layout de la TUI con todos los paneles."""
+
+    def get_all_content():
+        """Recopila todo el contenido en una sola lista de FormattedText."""
+        # Esta será la lista final de tuplas (estilo, texto)
+        final_formatted_content = []
+        
+        # Añadir la barra de estado. Es un FormattedText (lista de tuplas).
+        final_formatted_content.extend(_get_tui_status_bar_text())
+        final_formatted_content.append(('', '\n')) # Salto de línea explícito
+
+        # Separador. Convertirlo a FormattedText y añadirlo.
+        final_formatted_content.extend(to_formatted_text(HTML("-------------------------------------------------------------------------------------------")))
+        final_formatted_content.append(('', '\n')) # Salto de línea explícito
+        
+        # Panel de puertos. Cada elemento de _get_tui_ports_panel_text() es un FormattedText (lista de tuplas).
+        # Necesitamos extender la lista final con CADA UNA de estas sublistas.
+        for line_formatted_text in _get_tui_ports_panel_text():
+            final_formatted_content.extend(line_formatted_text)
+            final_formatted_content.append(('', '\n')) # Salto de línea explícito después de cada línea del panel
+
+        # Separador
+        final_formatted_content.extend(to_formatted_text(HTML("-------------------------------------------------------------------------------------------")))
+        final_formatted_content.append(('', '\n')) # Salto de línea explícito
+
+        # Panel de módulos. Similar al de puertos.
+        for line_formatted_text in _get_tui_modules_panel_text():
+            final_formatted_content.extend(line_formatted_text)
+            final_formatted_content.append(('', '\n')) # Salto de línea explícito después de cada línea del panel
+            
+        # Separador y línea de ayuda
+        final_formatted_content.extend(to_formatted_text(HTML("-------------------------------------------------------------------------------------------")))
+        final_formatted_content.append(('', '\n')) # Salto de línea explícito
+        final_formatted_content.extend(to_formatted_text(HTML("<b>[m] Monitor  |  [Esp] Versión  |  [Enter] Start/Stop  |  [Ctrl+C / q] Exit</b>")))
+
+        # Devolver la lista final de tuplas (estilo, texto).
+        return final_formatted_content
+
+    # El control de texto recibe la función que devuelve la lista de FormattedText
+    main_content_control = FormattedTextControl(text=get_all_content)
+    main_window = Window(content=main_content_control)
+
+    root_container = HSplit([
+        main_window,
+    ])
+    
+    return Layout(root_container)
 
 # --- Helper Functions ---
 
@@ -427,9 +598,8 @@ def import_from_midi_file(filepath, quantize_grid_str, ppqn, step_total_from_con
 
 
 
-
 def load_sequencers(full_json_contents, device_aliases_map):
-    global sequencers_state, user_variables # Añadir user_variables al global
+    global sequencers_state, user_variables
 
     all_sequencer_configs = []
     for content in full_json_contents:
@@ -461,33 +631,53 @@ def load_sequencers(full_json_contents, device_aliases_map):
             new_state['clock_in_port_name'] = device_aliases_map.get(clock_in_alias, clock_in_alias)
         
         ppqn = int(get_evaluated_value_from_output_config(seq_conf.get('ppqn'), SEQ_DEFAULTS['ppqn'], eval_context, f"SEQ{i}", "ppqn"))
-        # Evaluate step_total for INITIAL array creation, but DO NOT overwrite the expression in seq_conf
-        initial_num_steps = int(get_evaluated_value_from_output_config(seq_conf.get('step_total'), SEQ_DEFAULTS['step_total'], eval_context, f"SEQ{i}", "step_total"))
 
-        # --- LÓGICA DE CARGA REFACTORIZADA (APLICADA A TU CÓDIGO) ---
-        # 1. Poblar con los defaults del programa
+        # --- INICIO: Lógica de longitud de secuencia revisada ---
+        # Primero, cargamos todos los arrays definidos por el usuario tal cual.
+        user_defined_arrays = {}
+        for key, value in seq_conf.items():
+            if key.startswith("seq_") and isinstance(value, list):
+                user_defined_arrays[key] = value
+
+        # Determinamos la longitud de la secuencia.
+        num_steps = 0
+        if 'step_total' in seq_conf:
+            # Caso A: step_total tiene la máxima prioridad.
+            num_steps = int(get_evaluated_value_from_output_config(seq_conf['step_total'], SEQ_DEFAULTS['step_total'], eval_context, f"SEQ{i}", "step_total"))
+        elif user_defined_arrays:
+            # Caso B: Si no hay step_total, la longitud es la del array más largo.
+            num_steps = max(len(arr) for arr in user_defined_arrays.values())
+        else:
+            # Fallback si no hay ni step_total ni arrays.
+            num_steps = SEQ_DEFAULTS['step_total']
+        
+        # Guardamos el número de pasos para usarlo en la reconstrucción de la agenda.
+        # Esto es un truco para que la lógica de redimensionamiento dinámico funcione.
+        seq_conf['step_total'] = num_steps
+
+        # 1. Poblar con los defaults del programa, usando la longitud calculada.
         for key, value in SEQ_DEFAULTS.items():
-            new_state['arrays'][key] = [value] * initial_num_steps
+            new_state['arrays'][key] = [value] * num_steps
 
-        # 1.5. Aplicar herencia de global_root_note si es necesario
         if 'global_root_note' in user_variables and 'seq_root_note' not in seq_conf:
-            new_state['arrays']['seq_root_note'] = [user_variables['global_root_note']] * initial_num_steps
+            new_state['arrays']['seq_root_note'] = [user_variables['global_root_note']] * num_steps
             if VERBOSE_MODE: print(f"    - SEQ{i} hereda 'global_root_note' ({user_variables['global_root_note']}).")
 
-        # 2. Sobrescribir con cualquier array definido en el JSON
+        # 2. Sobrescribir con cualquier array/valor definido en el JSON.
         for key, value in seq_conf.items():
             if key in new_state['arrays']:
-                # Si el valor es una lista, la usamos para rellenar el array
                 if isinstance(value, list):
+                    # Asignamos la lista directamente, sin expandirla.
+                    # La lógica de repetición se hará en process_sequencer_step.
                     if len(value) > 0:
-                        new_state['arrays'][key] = (value + [value[-1]] * initial_num_steps)[:initial_num_steps]
-                # Si no es una lista (es un valor único), lo aplicamos a todos los pasos
+                        new_state['arrays'][key] = value
                 elif value is not None:
-                     new_state['arrays'][key] = [value] * initial_num_steps
+                     # Si es un valor único, creamos un array de ese valor.
+                     new_state['arrays'][key] = [value] * num_steps
+        # --- FIN: Lógica de longitud de secuencia revisada ---
 
         if 'shift_array' not in seq_conf:
-             new_state['arrays']['shift_array'] = [SEQ_DEFAULTS['shift_array'][0]] * initial_num_steps
-
+             new_state['arrays']['shift_array'] = [SEQ_DEFAULTS['shift_array'][0]] * num_steps
 
         # 3. Sobrescribir con datos del fichero MIDI (máxima prioridad)
         if "midi_file" in seq_conf and isinstance(seq_conf["midi_file"], list):
@@ -497,41 +687,25 @@ def load_sequencers(full_json_contents, device_aliases_map):
                 if mf_path:
                     track_index = mf_block.get("track_index")
                     start_step = mf_block.get("start_step", 0)
-                    imported_data = import_from_midi_file(mf_path, mf_block.get("quantize", "1/16"), ppqn, initial_num_steps, track_index, start_step)
+                    imported_data = import_from_midi_file(mf_path, mf_block.get("quantize", "1/16"), ppqn, num_steps, track_index, start_step)
                     if imported_data:
-                        new_state['midi_file_data'][0] = (imported_data, initial_num_steps)
-                        # El fichero MIDI define la nota absoluta, no la raíz.
+                        new_state['midi_file_data'][0] = (imported_data, num_steps)
                         if 'seq_note' in imported_data:
                             new_state['arrays']['seq_note'] = imported_data['seq_note']
-                            # Para el resto de arrays, los sobrescribimos
                             for array_name in ['seq_gate', 'seq_velocity', 'seq_note_length']:
                                 if array_name in imported_data:
                                     new_state['arrays'][array_name] = imported_data[array_name]
                         
-                        # --- INICIO DEL LOG DETALLADO ---
                         if VERBOSE_MODE:
                             print(f"    - Sobrescribiendo arrays del SEQ{i} con datos del fichero MIDI:")
-                            notes = new_state['arrays']['seq_note']
-                            gates = new_state['arrays']['seq_gate']
-                            velos = new_state['arrays']['seq_velocity']
-                            
-                            log_line_notes = "      Notas:    "
-                            log_line_gates = "      Gates:    "
-                            log_line_velos = "      Velocidad:"
-                            
-                            for step in range(initial_num_steps):
-                                note_str = f"{notes[step]:>3}" if gates[step] == 1 else "---"
-                                gate_str = f"{gates[step]:>3}"
-                                velo_str = f"{velos[step]:>3}" if gates[step] == 1 else "---"
-                                
-                                log_line_notes += f" {note_str}"
-                                log_line_gates += f" {gate_str}"
-                                log_line_velos += f" {velo_str}"
-                            
-                            print(log_line_notes)
-                            print(log_line_gates)
-                            print(log_line_velos)
-                        # --- FIN DEL LOG DETALLADO ---
+                            notes = new_state['arrays']['seq_note']; gates = new_state['arrays']['seq_gate']; velos = new_state['arrays']['seq_velocity']
+                            log_line_notes = "      Notas:    "; log_line_gates = "      Gates:    "; log_line_velos = "      Velocidad:"
+                            for step in range(num_steps):
+                                note_str = f"{notes[step % len(notes)] if gates[step % len(gates)] == 1 else '---':>3}"
+                                gate_str = f"{gates[step % len(gates)]:>3}"
+                                velo_str = f"{velos[step % len(velos)] if gates[step % len(gates)] == 1 else '---':>3}"
+                                log_line_notes += f" {note_str}"; log_line_gates += f" {gate_str}"; log_line_velos += f" {velo_str}"
+                            print(log_line_notes); print(log_line_gates); print(log_line_velos)
 
         sequencers_state.append(new_state)
 
@@ -542,39 +716,75 @@ def process_sequencer_step(seq_index, seq_state, fire_at_tick, mido_ports_map_g,
     seq_conf = seq_state['config']
     step_index = seq_state['active_step']
 
-    # 1. Construir el contexto base para este paso del secuenciador
+    # 1. Construir el contexto base para la evaluación de este paso
     base_context = {
         'step': step_index,
-        'version': current_active_version
+        'version': current_active_version,
+        # Incluir una referencia a los arrays del secuenciador para funciones como get_var
+        '_seq_arrays_ctx': seq_state.get('arrays', {})
     }
     base_context.update(user_variables)
 
-    for key, value in seq_conf.items():
-        if not isinstance(value, (list, dict)):
-            base_context[key] = value
 
-    for key, arr in seq_state['arrays'].items():
-        if step_index < len(arr):
-            context_key = key.replace('seq_', '') + '_out'
-            base_context[context_key] = arr[step_index]
+    # --- INICIO: lógica de variables locales ---
+    local_vars_block = seq_conf.get("set_local_var")
+    if isinstance(local_vars_block, dict):
+        for var_name, var_expr in local_vars_block.items():
+            evaluated_value = get_evaluated_value_from_output_config(
+                var_expr, None, base_context, f"SEQ[{seq_index}]", f"set_local_var.{var_name}"
+            )
+            if evaluated_value is not None:
+                base_context[var_name] = evaluated_value
 
 
-    is_active_expr = base_context.get('seq_active', 1)
-    is_active_val = get_evaluated_value_from_output_config(
-        is_active_expr, 1, base_context, f"SEQ[{seq_index}]", "seq_active"
-    )
+    # --- Lógica de evaluación dinámica ---
+    # Helper para obtener el valor/expresión correcto para el paso actual (de una lista o un valor único)
+    def get_value_for_step(param_name, default_value):
+        config_value = seq_conf.get(param_name)
+        
+        # Si el parámetro está en los arrays (porque fue definido como una lista en el JSON), usamos eso.
+        if param_name in seq_state['arrays']:
+            array = seq_state['arrays'][param_name]
+            if array and isinstance(array, list):
+                return array[step_index % len(array)]
+
+        # Si no, usamos el valor único de la configuración (que puede ser una expresión string o un número)
+        if config_value is not None:
+            return config_value
+            
+        return default_value
+
+    # Evaluar los parámetros de control principales en tiempo real
+    active_expr = get_value_for_step('seq_active', SEQ_DEFAULTS['seq_active'])
+    is_active_val = get_evaluated_value_from_output_config(active_expr, 1, base_context, f"SEQ[{seq_index}]", "seq_active")
     if not is_active_val:
-        return # Si no está activo, no procesar este paso.
-    
-    if base_context.get('gate_out', 1) == 0 or base_context.get('mute_out', 0) == 1:
-        return # No procesar este paso si el gate está cerrado o está muteado.
-    
+        return
+
+    gate_expr = get_value_for_step('seq_gate', SEQ_DEFAULTS['seq_gate'])
+    gate_val = get_evaluated_value_from_output_config(gate_expr, 1, base_context, f"SEQ[{seq_index}]", "seq_gate")
+    if gate_val == 0:
+        return
+
+    mute_expr = get_value_for_step('seq_mute', SEQ_DEFAULTS['seq_mute'])
+    mute_val = get_evaluated_value_from_output_config(mute_expr, 0, base_context, f"SEQ[{seq_index}]", "seq_mute")
+    if mute_val == 1:
+        return
+
+    # Poblar el resto del contexto para el bloque de 'output' con valores evaluados
+    for key, default in SEQ_DEFAULTS.items():
+        context_key = key.replace('seq_', '') + '_out'
+        # No sobreescribir los que ya hemos puesto en el contexto principal
+        if context_key not in base_context:
+            expr = get_value_for_step(key, default)
+            base_context[context_key] = get_evaluated_value_from_output_config(expr, default, base_context, f"SEQ[{seq_index}]", key)
+    # --- FIN: Lógica de evaluación dinámica ---
+
     # 2. Determinar qué bloques de 'output' procesar
     output_blocks = seq_conf.get("output", [])
     if not output_blocks:
         output_blocks = [{"event_out": "note"}]
 
-    # 3. Iterar, procesar, ENVIAR y LOGUEAR cada bloque de 'output'
+    # 3. Iterar, procesar y ENVIAR cada bloque de 'output'
     for i, out_block in enumerate(output_blocks):
         if not isinstance(out_block, dict):
             continue
@@ -594,27 +804,23 @@ def process_sequencer_step(seq_index, seq_state, fire_at_tick, mido_ports_map_g,
 
             try:
                 dest_port_obj.send(msg_to_send)
+                _update_tui_port_out_data(dest_port_obj, msg_to_send, dest_alias_str)
+                seq_state['last_fire_time'] = time.time()
 
                 if monitor_active:
-                    total_steps = len(seq_state['arrays'].get('seq_note', []))
+                    total_steps = len(seq_state['arrays'].get('seq_gate', []))
                     log_prefix = f"SQ[{seq_index}]: ({step_index + 1}/{total_steps}):"
                     log_line = format_midi_message_for_log(msg_to_send, log_prefix, current_active_version, None, dest_alias_str)
                     if log_line:
                         print(log_line)
 
                 if event_type == 'note_on' and msg_to_send.velocity > 0:
-                    default_length = base_context.get('note_length_out', 0.9)
-                    length_val = float(get_evaluated_value_from_output_config(
-                        out_block.get('note_length_out'), default_length, base_context, f"SEQ[{seq_index}]", "note_length_out"
-                    ))
+                    # Usamos el valor ya evaluado y puesto en el contexto
+                    length_val = float(base_context.get('note_length_out', 0.9))
 
-                    # Si la duración es -1, no se agenda el note_off.
                     if length_val != -1:
-                        ppqn = int(base_context.get('ppqn', SEQ_DEFAULTS['ppqn']))
-                        step_duration_expr = seq_conf.get('step_duration', "1/16")
-                        step_duration_str = get_evaluated_value_from_output_config(
-                            step_duration_expr, "1/16", base_context, f"SEQ[{seq_index}]", "note_off_calc"
-                        )
+                        ppqn = int(base_context.get('ppqn_out', SEQ_DEFAULTS['ppqn']))
+                        step_duration_str = base_context.get('step_duration_out', "1/16")
                         ticks_for_step = parse_step_duration(step_duration_str, ppqn)
                         
                         note_off_delay = int(round(ticks_for_step * length_val))
@@ -626,7 +832,6 @@ def process_sequencer_step(seq_index, seq_state, fire_at_tick, mido_ports_map_g,
             except Exception as e:
                 if monitor_active:
                     print(f"  [!] Error enviando mensaje de SEQ[{seq_index}]: {e}")
-
 
 def load_arpeggiators(full_json_contents):
     global arpeggiator_templates
@@ -888,6 +1093,8 @@ def process_arpeggiator_step(instance_key, instance_state, mido_ports_map_g, is_
         final_channel = instance_key[1]
         out_msg = mido.Message('note_on', channel=final_channel, note=final_note, velocity=final_vel)
         target_port_obj.send(out_msg)
+        _update_tui_port_out_data(target_port_obj, out_msg, device_out_alias)
+        instance_state['last_fire_time'] = time.time()
         
         if monitor_active:
             log_prefix = f"ARP[{instance_key[0]},{instance_key[1]}]: ({step_index + 1}/{len(pattern)}):"
@@ -920,6 +1127,7 @@ def _silence_instance(instance_state, module_type_str=""):
         if target_port_obj and not target_port_obj.closed:
             try:
                 target_port_obj.send(note_off_msg)
+                _update_tui_port_out_data(target_port_obj, note_off_msg, device_out_alias)
                 if monitor_active:
                     log_line = format_midi_message_for_log(note_off_msg, prefix=f"   silenced {module_type_str}: ", target_port_alias_for_log_output=device_out_alias)
                     if log_line: print(log_line)
@@ -928,6 +1136,121 @@ def _silence_instance(instance_state, module_type_str=""):
 
     # Vaciar la lista de notas pendientes
     instance_state['pending_note_offs'].clear()
+
+def _find_port_name_by_alias(alias, open_ports, device_aliases):
+    """Encuentra el nombre completo de un puerto abierto a partir de su alias."""
+    if not alias:
+        return None
+    for p_name, p_info in open_ports.items():
+        if p_info.get('alias_used') == alias:
+            return p_name
+    resolved_substring = device_aliases.get(alias, alias)
+    for p_name in open_ports.keys():
+        if resolved_substring.lower() in p_name.lower():
+            return p_name
+    return None
+
+def _load_staged_config(rule_files_to_load, base_dir):
+    """Carga una configuración completa en un diccionario temporal para el staging."""
+    staged = {
+        'aliases': {}, 'filters': [], 'osc_filters': [], 'user_vars': {},
+        'sequencer_configs': [], 'arp_templates': {}, 'json_contents': [],
+        'live_reload_settings': {}, 'versions': {0}
+    }
+    for rule_file_name_stem in rule_files_to_load:
+        file_path = base_dir / (rule_file_name_stem + '.json')
+        json_content = _load_json_file_content(file_path)
+        if not json_content: continue
+
+        staged['json_contents'].append(json_content)
+        staged['aliases'].update(json_content.get("device_alias", {}))
+        
+        if "live_reload_settings" in json_content:
+            staged['live_reload_settings'].update(json_content["live_reload_settings"])
+
+        filters_from_file = json_content.get("midi_filter", [])
+        if isinstance(filters_from_file, list):
+            for i, f_config in enumerate(filters_from_file):
+                if isinstance(f_config, dict):
+                    f_config["_source_file"] = file_path.name
+                    f_config["_filter_id_str"] = f"{rule_file_name_stem}.{i}"
+                    staged['filters'].append(f_config)
+    
+    for content in staged['json_contents']:
+        if "sequencer" in content and isinstance(content["sequencer"], list):
+            staged['sequencer_configs'].extend(content["sequencer"])
+    
+    for content in staged['json_contents']:
+        if "arpeggiator" in content and isinstance(content["arpeggiator"], list):
+            for arp_conf in content["arpeggiator"]:
+                if isinstance(arp_conf, dict) and "arp_id" in arp_conf:
+                    arp_id = arp_conf["arp_id"]
+                    final_config = ARP_DEFAULTS.copy()
+                    final_config.update(arp_conf)
+                    staged['arp_templates'][arp_id] = final_config
+
+    staged['user_vars'].update(next((c.get("user_variables", {}) for c in staged['json_contents'] if "user_variables" in c), {}))
+    
+    temp_versions = {0}
+    for f in staged['filters']:
+        if "version" in f:
+            v = f["version"]
+            if isinstance(v, int): temp_versions.add(v)
+            elif isinstance(v, list): temp_versions.update(i for i in v if isinstance(i, int))
+    staged['versions'] = sorted(list(temp_versions))
+
+    return staged
+
+def _apply_staged_config(staged_data):
+    """Aplica la configuración del staging a las variables globales activas."""
+    global global_device_aliases, all_loaded_filters, all_loaded_osc_filters, user_variables
+    global sequencers_state, arpeggiator_templates, full_json_contents, available_versions
+
+    clear_reloadable_state()
+
+    global_device_aliases = staged_data.get('aliases', {})
+    all_loaded_filters = staged_data.get('filters', [])
+    all_loaded_osc_filters = staged_data.get('osc_filters', [])
+    user_variables = staged_data.get('user_vars', {})
+    arpeggiator_templates = staged_data.get('arp_templates', {})
+    full_json_contents = staged_data.get('json_contents', [])
+    available_versions = staged_data.get('versions', {0})
+
+    load_sequencers(full_json_contents, global_device_aliases)
+    print("[*] Configuración global actualizada.")
+
+
+def global_panic(trigger_source="comando STOP"):
+    """Detiene todos los módulos y envía 'All Notes Off' a todos los puertos de salida."""
+    global sequencers_state, arpeggiator_instances, opened_ports_tracking, monitor_active
+
+    if monitor_active:
+        print(f"[*] GLOBAL PANIC ACTIVADO (por: {trigger_source})")
+
+    # 1. Detener y silenciar todos los secuenciadores
+    for i, seq_state in enumerate(sequencers_state):
+        seq_state['is_playing'] = False
+        seq_state['is_armed'] = False
+        _silence_instance(seq_state, f"SEQ[{i}]")
+
+    # 2. Detener y silenciar todos los arpegiadores
+    for key, instance_state in arpeggiator_instances.items():
+        instance_state['is_playing'] = False
+        instance_state['is_armed'] = False
+        _silence_instance(instance_state, f"ARP[{key[0]},{key[1]}]")
+
+    # 3. Enviar CC 123 (All Notes Off) a todos los puertos de salida en todos los canales
+    for port_name, port_info in opened_ports_tracking.items():
+        if port_info["type"] == "out" and port_info["obj"] and not port_info["obj"].closed:
+            if monitor_active:
+                print(f"  - Enviando AllNotesOff a '{port_name}'")
+            try:
+                for channel in range(16):
+                    port_info["obj"].send(mido.Message('control_change', channel=channel, control=123, value=0))
+            except Exception as e:
+                if monitor_active:
+                    print(f"  [!] Adv: No se pudo enviar 'All Notes Off' a '{port_name}': {e}")
+
 
 def _rebuild_sequencer_schedule(seq_index, seq_state):
     global user_variables
@@ -1382,13 +1705,25 @@ def format_midi_message_for_log(msg, prefix="", active_version=-1,
         # Considerar note_on con velocity 0 como note_off efectivo
         is_eff_off = msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0)
         type_str = "NT_off" if is_eff_off else "NT_on"
-        parts.append(f"Ch({msg.channel + 1}) {type_str}({msg.note}){vel_info}")
-    elif msg.type == 'control_change': parts.append(f"Ch({msg.channel + 1}) CC({msg.control}) val({msg.value})")
-    elif msg.type == 'program_change': parts.append(f"Ch({msg.channel + 1}) PC({msg.program})")
-    elif msg.type == 'pitchwheel': parts.append(f"Ch({msg.channel + 1}) Pitch({msg.pitch})")
-    elif msg.type == 'aftertouch': parts.append(f"Ch({msg.channel + 1}) AfTouch({msg.value})")
-    elif msg.type == 'polytouch': parts.append(f"Ch({msg.channel + 1}) PolyTouch({msg.note}) val({msg.value})")
-    elif msg.type == 'sysex': parts.append(f"SysEx (len {len(msg.data) if hasattr(msg, 'data') else 'N/A'})")
+        parts.append(f"Ch({msg.channel}) {type_str}({msg.note}){vel_info}")
+    elif msg.type == 'control_change': parts.append(f"Ch({msg.channel}) CC({msg.control}) val({msg.value})")
+    elif msg.type == 'program_change': parts.append(f"Ch({msg.channel}) PC({msg.program})")
+    elif msg.type == 'pitchwheel': parts.append(f"Ch({msg.channel}) Pitch({msg.pitch})")
+    elif msg.type == 'aftertouch': parts.append(f"Ch({msg.channel}) AfTouch({msg.value})")
+    elif msg.type == 'polytouch': parts.append(f"Ch({msg.channel}) PolyTouch({msg.note}) val({msg.value})")
+    elif msg.type == 'sysex':
+        if hasattr(msg, 'data'):
+            max_bytes_to_show = 24 # Mostrar hasta 24 bytes para no inundar el log
+            hex_data = ' '.join(f'{b:02X}' for b in msg.data[:max_bytes_to_show])
+            
+            suffix = ""
+            if len(msg.data) > max_bytes_to_show:
+                suffix = f" ... (len: {len(msg.data)})"
+            
+            parts.append(f"SysEx: {hex_data}{suffix}")
+        else:
+            parts.append("SysEx (no data)")
+            
     elif msg.type in ['start', 'stop', 'continue', 'songpos', 'clock', 'reset']: parts.append(f"{msg_type_display}")
     else: parts.append(f"{msg_type_display} (raw:{msg.hex()})") # Mensajes menos comunes
 
@@ -1522,6 +1857,10 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
         )
         if not condition_result:
             return []
+        
+    if out_conf.get("action") == "panic":
+        global_panic(trigger_source=f"filtro {filter_id_for_debug}")
+        return [] # La acción de pánico no genera más mensajes MIDI
         
     # --- 1. Manejar acciones especiales que no generan MIDI directamente ---
     if "send_osc" in out_conf:
@@ -1664,6 +2003,8 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
                         elif sequencer_index_target is not None and isinstance(sequencer_index_target, int) and 0 <= sequencer_index_target < len(sequencers_state):
                             target_array_dict = sequencers_state[sequencer_index_target]['arrays']
                             temp_eval_context['_seq_arrays_ctx'] = target_array_dict
+                        elif array_name_str in user_variables:
+                            target_array_dict = user_variables
                         if target_array_dict:
                             index_val = evaluate_expression(index_expr_str, temp_eval_context)
                             value_to_set_any = get_evaluated_value_from_output_config(value_expr_str, None, temp_eval_context, filter_id_for_debug, f"set_var.{array_name_str}")
@@ -1699,9 +2040,10 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
             if instance['config'].get('arp_id') == arp_id: instance['config'].update(arpeggiator_templates[arp_id])
         if base_context_for_this_output.get('event_type_in_ctx') not in ['note_on', 'note_off']: return []
         final_template = ARP_DEFAULTS.copy(); final_template.update(arpeggiator_templates.get(arp_id, {}))
-        ch_out_arp_expr = final_template.get("channel_out", base_context_for_this_output.get('ch0_in_ctx', 0) + 1)
-        final_ch_out_eval = get_evaluated_value_from_output_config(ch_out_arp_expr, 1, current_output_eval_context, filter_id_for_debug, "channel_out")
-        final_ch_out_arp = max(0, min(15, int(final_ch_out_eval) - 1))
+        # El valor por defecto es el canal de entrada (0-15)
+        ch_out_arp_expr = final_template.get("channel_out", base_context_for_this_output.get('ch0_in_ctx', 0))
+        final_ch_out_eval = get_evaluated_value_from_output_config(ch_out_arp_expr, 0, current_output_eval_context, filter_id_for_debug, "channel_out")
+        final_ch_out_arp = max(0, min(15, int(final_ch_out_eval)))
         instance_key = (arp_id, final_ch_out_arp)
         if instance_key not in arpeggiator_instances:
              arpeggiator_instances[instance_key] = {'config': final_template, 'is_playing': False, 'tick_counter': 0, 'active_step': 0, 'input_notes': [], 'arp_pattern': [], 'arp_velocity_pattern': [], 'pending_note_offs': [], 'is_armed': False, 'direction_state': 'up', 'direction_index': 0}
@@ -1712,6 +2054,48 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
         velocity_to_send = get_evaluated_value_from_output_config(out_conf.get("value_2_out"), base_context_for_this_output.get('value_in_2_ctx'), current_output_eval_context, filter_id_for_debug, "Arp.Val2")
         update_arp_input(instance_key, notes_to_send, velocity_to_send, base_context_for_this_output['event_type_in_ctx'])
         return []
+
+
+    if "sysex_data" in out_conf:
+        sysex_template = out_conf["sysex_data"]
+        if not isinstance(sysex_template, list):
+            if monitor_active: print(f"Adv ({filter_id_for_debug}): 'sysex_data' debe ser una lista.")
+            return []
+
+        final_sysex_bytes = []
+        for item_expr in sysex_template:
+            # Evaluar cada elemento de la plantilla
+            evaluated_item = get_evaluated_value_from_output_config(
+                item_expr, 0, current_output_eval_context, filter_id_for_debug, "sysex_byte"
+            )
+            
+            # Manejar si el elemento evaluado es una lista (p. ej. de una función como chord())
+            if isinstance(evaluated_item, list):
+                for sub_item in evaluated_item:
+                    # Asegurar que cada byte esté en el rango 0-127
+                    final_sysex_bytes.append(max(0, min(127, int(sub_item))))
+            else:
+                final_sysex_bytes.append(max(0, min(127, int(evaluated_item))))
+
+        # Encontrar el puerto de salida (lógica similar a la de abajo)
+        out_dev_alias = out_conf.get("device_out", filter_config_parent_ref.get("device_out"))
+        if not out_dev_alias:
+            return []
+
+        target_port_obj_to_use = None
+        out_dev_sub = device_aliases_g.get(out_dev_alias, out_dev_alias)
+        for p_name, p_info in mido_ports_map_g.items():
+            if p_info["type"] == "out" and out_dev_sub.lower() in p_name.lower():
+                target_port_obj_to_use = p_info["obj"]
+                break
+        
+        if target_port_obj_to_use:
+            sysex_msg = mido.Message('sysex', data=final_sysex_bytes)
+            # Devolver el mensaje SysEx y terminar el procesamiento de este bloque de output
+            return [(sysex_msg, target_port_obj_to_use, out_dev_alias, filter_id_for_debug, 'sysex', None)]
+        else:
+            return [] # Puerto no encontrado
+
 
     # --- 3. Unificar parámetros para la generación de MIDI ---
     output_messages_and_meta = []
@@ -1747,7 +2131,7 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
     final_ch_out_clamped = 0
     if ch_out_expr is not None:
         final_ch_out_eval = get_evaluated_value_from_output_config(ch_out_expr, 1, current_output_eval_context, filter_id_for_debug, f"Out.{i_out_idx}.Ch")
-        final_ch_out_clamped = max(0, min(15, int(final_ch_out_eval) - 1))
+        final_ch_out_clamped = max(0, min(15, int(final_ch_out_eval)))
     else:
         final_ch_out_clamped = base_context_for_this_output.get('ch0_in_ctx', 0)
 
@@ -1794,6 +2178,8 @@ def process_single_output_block(out_conf, i_out_idx, base_context_for_this_outpu
                 output_msg = mido.Message('control_change', channel=final_ch_out_clamped, control=max(0, min(127, final_val1_out_eval)), value=max(0, min(127, output_msg_value2_encoded)))
             elif mido_event_type  == "program_change":
                 output_msg = mido.Message('program_change', channel=final_ch_out_clamped, program=max(0, min(127, final_val1_out_eval)))
+            elif mido_event_type in ["start", "stop", "continue"]:
+                output_msg = mido.Message(mido_event_type)
         except Exception as e:
             print(f"ERROR Creando Msg: {e}")
 
@@ -2081,9 +2467,10 @@ def _check_value_condition(condition_config, actual_value):
 
 
 
+# midimod.py
 
 def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_dummy, filter_config, current_active_version_global, device_aliases_global, mido_ports_map, is_virtual_mode_now, virtual_out_obj=None, virtual_out_name=""):
-    global cc_value_sent, cc_value_control
+    global cc_value_sent, cc_value_control, cc_input_s_state
     
     if msg_input_port_name_or_dummy != DUMMY_PORT_NAME_FOR_VERSION_TRIGGER and original_msg_or_dummy is None:
         return ([], None)
@@ -2106,12 +2493,9 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
             break
 
     if shortcut_key_found:
-        # Es un filtro de atajo. Lo transformamos a un filtro estándar.
         temp_config = filter_config.copy()
         action_block = temp_config.pop(shortcut_key_found)
-        if isinstance(action_block, dict):
-            temp_config.update(action_block)
-        
+        if isinstance(action_block, dict): temp_config.update(action_block)
         match = shortcut_pattern.match(shortcut_key_found)
         keyword, value_expr = match.groups()
         keyword_map = {'note': 'note_on', 'note_on': 'note_on', 'note_off': 'note_off', 'cc': 'control_change', 'pc': 'program_change'}
@@ -2119,7 +2503,6 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
         temp_config['value_1_in'] = value_expr
         f_config_processed = temp_config
     else:
-        # Es un filtro estándar. Lo usamos tal cual.
         f_config_processed = filter_config
     # --- FIN: Lógica de desacoplamiento ---
 
@@ -2137,49 +2520,97 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
     elif filter_device_in_alias is not None:
         return ([], None)
 
+    # --- Preparar CONTEXTO DE ENTRADA ---
     ch0_in_ctx = getattr(effective_msg_for_context, 'channel', -1)
     event_type_in_ctx = effective_msg_for_context.type
-    value_in_1_ctx, value_in_2_ctx = 0, 0
+    value_in_1_ctx = 0
+    value_in_2_ctx = 0
+    delta_in_2_ctx = 0
+    cc_type_in_ctx = "abs"
 
-    if event_type_in_ctx in ['note_on', 'note_off']:
+    if event_type_in_ctx == 'control_change':
+        value_in_1_ctx = effective_msg_for_context.control
+        cc_ch_input = effective_msg_for_context.channel
+        cc_num_input = effective_msg_for_context.control
+        C_current_abs_input = effective_msg_for_context.value
+        cc_type_in_ctx = f_config_processed.get("cc_type_in", "abs").lower()
+
+        if cc_type_in_ctx == "abs":
+            value_in_2_ctx = C_current_abs_input
+        elif cc_type_in_ctx == "relative_signed":
+            delta_in_2_ctx = C_current_abs_input - 64
+            value_in_2_ctx = max(0, min(127, cc_value_sent.get((cc_ch_input, cc_num_input), 64) + delta_in_2_ctx))
+        elif cc_type_in_ctx == "relative_2c":
+            if 1 <= C_current_abs_input <= 63: delta_in_2_ctx = C_current_abs_input
+            elif 65 <= C_current_abs_input <= 127: delta_in_2_ctx = C_current_abs_input - 128
+            else: delta_in_2_ctx = 0
+            value_in_2_ctx = max(0, min(127, cc_value_sent.get((cc_ch_input, cc_num_input), 64) + delta_in_2_ctx))
+        elif cc_type_in_ctx == "abs_relative":
+            abs2rel_factor = float(f_config_processed.get("abs2rel_factor", 2.0))
+            threshold = int(f_config_processed.get("threshold", 0))
+            L_internal_state = cc_input_s_state.get((cc_ch_input, cc_num_input), C_current_abs_input)
+            P_knob_previous = cc_value_control.get((cc_ch_input, cc_num_input), C_current_abs_input)
+            
+            if threshold > 0 and abs(C_current_abs_input - L_internal_state) < threshold:
+                value_in_2_ctx = C_current_abs_input
+            else:
+                delta_knob = C_current_abs_input - P_knob_previous
+                accelerated = L_internal_state + abs2rel_factor * delta_knob
+                value_in_2_ctx = max(0, min(127, int(round(accelerated))))
+            
+            cc_input_s_state[(cc_ch_input, cc_num_input)] = value_in_2_ctx
+            delta_in_2_ctx = C_current_abs_input - P_knob_previous
+        elif cc_type_in_ctx == "abs_catchup":
+            T_target_value = cc_value_sent.get((cc_ch_input, cc_num_input), CC_SENT_UNINITIALIZED)
+            if T_target_value == CC_SENT_UNINITIALIZED:
+                value_in_2_ctx = C_current_abs_input
+            else:
+                P_knob_previous = cc_value_control.get((cc_ch_input, cc_num_input), C_current_abs_input)
+                if abs(P_knob_previous - T_target_value) <= 1 or \
+                   (P_knob_previous < T_target_value and C_current_abs_input >= T_target_value) or \
+                   (P_knob_previous > T_target_value and C_current_abs_input <= T_target_value):
+                    value_in_2_ctx = C_current_abs_input
+                else:
+                    return ([], None)
+            delta_in_2_ctx = C_current_abs_input - T_target_value if T_target_value != CC_SENT_UNINITIALIZED else 0
+        else: # Fallback a 'abs'
+            value_in_2_ctx = C_current_abs_input
+            cc_type_in_ctx = "abs"
+
+    elif event_type_in_ctx in ['note_on', 'note_off']:
         value_in_1_ctx = effective_msg_for_context.note
         value_in_2_ctx = effective_msg_for_context.velocity
-    elif event_type_in_ctx == 'control_change':
-        value_in_1_ctx = effective_msg_for_context.control
-        value_in_2_ctx = effective_msg_for_context.value
     elif event_type_in_ctx == 'program_change':
         value_in_1_ctx = effective_msg_for_context.program
+    elif event_type_in_ctx == 'pitchwheel':
+        value_in_1_ctx = effective_msg_for_context.pitch
+    elif event_type_in_ctx == 'aftertouch':
+        value_in_1_ctx = effective_msg_for_context.value
+    elif event_type_in_ctx == 'polytouch':
+        value_in_1_ctx = effective_msg_for_context.note
+        value_in_2_ctx = effective_msg_for_context.value
     
     base_context_for_outputs = {
         'ch0_in_ctx': ch0_in_ctx, 'value_in_1_ctx': value_in_1_ctx, 'value_in_2_ctx': value_in_2_ctx,
-        'event_type_in_ctx': event_type_in_ctx, 'cc_type_in_ctx': "abs"
+        'delta_in_2_ctx': delta_in_2_ctx, 'event_type_in_ctx': event_type_in_ctx, 'cc_type_in_ctx': cc_type_in_ctx
     }
 
     if not is_version_trigger_call:
         if "event_in" in f_config_processed:
             event_conditions = f_config_processed["event_in"]
-            if not isinstance(event_conditions, list):
-                event_conditions = [event_conditions]
-            
+            if not isinstance(event_conditions, list): event_conditions = [event_conditions]
             normalized_conditions = []
             for cond in event_conditions:
                 cond_lower = str(cond).lower()
-                if cond_lower == "note":
-                    normalized_conditions.extend(["note_on", "note_off"])
-                elif cond_lower == "cc":
-                    normalized_conditions.append("control_change")
-                elif cond_lower == "pc":
-                    normalized_conditions.append("program_change")
-                else:
-                    normalized_conditions.append(cond_lower)
-            
-            if event_type_in_ctx.lower() not in normalized_conditions:
-                return ([], None)
+                if cond_lower == "note": normalized_conditions.extend(["note_on", "note_off"])
+                elif cond_lower == "cc": normalized_conditions.append("control_change")
+                elif cond_lower == "pc": normalized_conditions.append("program_change")
+                else: normalized_conditions.append(cond_lower)
+            if event_type_in_ctx.lower() not in normalized_conditions: return ([], None)
         
         if "ch_in" in f_config_processed:
             cond = evaluate_expression(f_config_processed["ch_in"], base_context_for_outputs)
-            # Comparamos la condición con el canal en formato 1-16
-            if not _check_value_condition(cond, ch0_in_ctx + 1): return ([], None)
+            if not _check_value_condition(cond, ch0_in_ctx): return ([], None)
         if "value_1_in" in f_config_processed:
             cond = evaluate_expression(f_config_processed["value_1_in"], base_context_for_outputs)
             if not _check_value_condition(cond, value_in_1_ctx): return ([], None)
@@ -2198,7 +2629,6 @@ def process_midi_event_new_logic(original_msg_or_dummy, msg_input_port_name_or_d
         cc_value_control[(original_msg_or_dummy.channel, original_msg_or_dummy.control)] = original_msg_or_dummy.value
         
     return (generated_outputs_with_meta, version_action_from_this_filter)
-
 
 
 def process_version_activated_filters(new_version_activated, all_filters_list, device_aliases_g, mido_ports_map_g, is_virtual_mode_now, virtual_out_obj=None, virtual_out_name=""):
@@ -2242,6 +2672,7 @@ def process_version_activated_filters(new_version_activated, all_filters_list, d
             if dest_port_obj and hasattr(dest_port_obj, "send"):
                 try: 
                     dest_port_obj.send(msg_to_send) # Enviar el msg_to_send
+                    _update_tui_port_out_data(dest_port_obj, msg_to_send, dest_alias_str)
                     if monitor_active:
                         log_line = format_midi_message_for_log(msg_to_send, prefix="  \u21E2 OUT: ", active_version=new_version_activated, rule_id_source=src_filter_id_str, target_port_alias_for_log_output=dest_alias_str)
                         if log_line: print(f"{log_line}")
@@ -2384,18 +2815,34 @@ def _cleanup_for_reload():
             if monitor_active:
                 print(f"  - Preservando estado del secuenciador en reproducción: '{seq_id}'")
 
+    # Silenciar instancias de arpegiador antes de limpiar
+    for key, instance_state in arpeggiator_instances.items():
+        instance_state['is_playing'] = False
+        instance_state['is_armed'] = False
+        _silence_instance(instance_state, f"ARP[{key[0]},{key[1]}]")
+
     # Enviar panic a los puertos ANTES de limpiarlos
     for port_info in opened_ports_tracking.values():
         if port_info["type"] == "out" and port_info["obj"] and not port_info["obj"].closed:
             try:
                 for channel in range(16):
-                    port_info["obj"].send(mido.Message('control_change', channel=channel, control=123, value=0))
+                    msg = mido.Message('control_change', channel=channel, control=123, value=0)
+                    port_info["obj"].send(msg)
+                
+                # Marcamos la actividad para la TUI una sola vez, fuera del bucle
+                port_info["last_out_msg_str"] = "AllNotesOff"
+                now = time.time()
+                port_info["last_out_msg_time"] = now
+                port_info["activity_time"] = now
             except Exception as e:
-                print(f"  [!] Adv: No se pudo enviar 'All Notes Off' a '{port_info['obj'].name}': {e}")
+                if monitor_active:
+                    print(f"  [!] Adv: No se pudo enviar 'All Notes Off' a '{port_name}': {e}")
 
     # Limpiar solo las configuraciones, no los recursos (puertos)
     clear_reloadable_state()
 
+
+# midimod.py
 
 def load_configuration(rule_files_to_load, base_dir, is_virtual_mode, vp_in_name, vp_out_name):
     """Carga toda la configuración desde una lista de archivos y gestiona los puertos de forma inteligente."""
@@ -2464,6 +2911,16 @@ def load_configuration(rule_files_to_load, base_dir, is_virtual_mode, vp_in_name
                     all_loaded_osc_filters.append(osc_f)
 
     user_variables.update(next((content.get("user_variables", {}) for content in full_json_contents if "user_variables" in content), {}))
+
+    
+    for var_name, initial_value in user_variables.items():
+        if var_name.startswith("ch_") and var_name not in channel_arrays:
+            if isinstance(initial_value, list):
+                channel_arrays[var_name] = list(initial_value) # Copiar la lista
+                if VERBOSE_MODE:
+                    print(f"  - Array persistente '{var_name}' inicializado desde user_variables.")
+
+
     if user_variables:
         print("\nVariables de Usuario Globales:")
         for var_name, initial_value in user_variables.items(): print(f"  - {var_name}: {initial_value}")
@@ -2475,32 +2932,41 @@ def load_configuration(rule_files_to_load, base_dir, is_virtual_mode, vp_in_name
 
     # --- Gestión Inteligente de Puertos ---
     print("\n--- Gestión de Puertos MIDI ---")
-    required_ports = set()
-    all_configs = all_loaded_filters + sequencers_state + list(arpeggiator_instances.values())
-    for item in all_configs:
-        # --- INICIO DE LA CORRECCIÓN ---
-        # Extraer el diccionario de configuración real, ya sea un filtro o un módulo de estado
-        conf_dict = item.get('config', item)
-        # --- FIN DE LA CORRECCIÓN ---
+    
+    # --- INICIO DE LA NUEVA LÓGICA ---
+    required_inputs = set()
+    required_outputs = set()
 
-        for key in ["device_in", "clock_in", "device_out"]:
+    all_configs = all_loaded_filters + [s['config'] for s in sequencers_state] + [a['config'] for a in arpeggiator_instances.values()]
+    
+    for conf_dict in all_configs:
+        # Recopilar puertos de entrada
+        for key in ["device_in", "clock_in"]:
             alias = conf_dict.get(key)
-            if alias: required_ports.add(global_device_aliases.get(alias, alias))
+            if alias:
+                required_inputs.add(global_device_aliases.get(alias, alias))
         
+        # Recopilar puertos de salida
+        alias = conf_dict.get("device_out")
+        if alias:
+            required_outputs.add(global_device_aliases.get(alias, alias))
+        
+        # Recopilar puertos de salida de los bloques 'output'
         outputs = conf_dict.get("output", [])
         if isinstance(outputs, list):
             for out_block in outputs:
                 if isinstance(out_block, dict):
                     alias = out_block.get("device_out")
-                    if alias: required_ports.add(global_device_aliases.get(alias, alias))
+                    if alias:
+                        required_outputs.add(global_device_aliases.get(alias, alias))
 
     if "TPT_out" in global_device_aliases:
-        required_ports.add(global_device_aliases["TPT_out"])
+        required_outputs.add(global_device_aliases["TPT_out"])
 
     # Cerrar puertos que ya no se necesitan
+    all_required_aliases = required_inputs.union(required_outputs)
     for port_name, port_info in list(opened_ports_tracking.items()):
-        # Comprobamos si la subcadena/alias que se usó para abrirlo sigue siendo requerida
-        if port_info["alias_used"] not in required_ports:
+        if port_info["alias_used"] not in all_required_aliases:
             print(f"  - [CLOSE] Puerto '{port_name}' (usado por '{port_info['alias_used']}') ya no es necesario. Cerrando...")
             try:
                 port_info["obj"].close()
@@ -2510,36 +2976,45 @@ def load_configuration(rule_files_to_load, base_dir, is_virtual_mode, vp_in_name
             except Exception as e:
                 print(f"  [!] Error cerrando puerto '{port_name}': {e}")
 
-
     # Abrir puertos nuevos que se necesiten
     mido_inputs = mido.get_input_names()
     mido_outputs = mido.get_output_names()
 
-    for alias in required_ports:
-        if not alias: continue # Ignorar alias vacíos
-
-        # Intentar abrir como entrada
+    # Abrir puertos de ENTRADA
+    for alias in required_inputs:
+        if not alias: continue
         port_name_in = find_port_by_substring(mido_inputs, alias)
         if port_name_in and port_name_in not in active_input_handlers:
             try:
                 in_port_obj = mido.open_input(port_name_in)
                 active_input_handlers[port_name_in] = in_port_obj
-                opened_ports_tracking[port_name_in] = {"obj": in_port_obj, "type": "in", "alias_used": alias}
+                opened_ports_tracking[port_name_in] = {
+                    "obj": in_port_obj, "type": "in", "alias_used": alias,
+                    "last_in_msg_str": "", "last_in_msg_time": 0,
+                    "last_out_msg_str": "", "last_out_msg_time": 0, "activity_time": 0
+                }
                 print(f"  - [OPEN-IN] Abierto '{port_name_in}' (requerido por '{alias}')")
             except Exception as e:
                 print(f"  [!] Error abriendo IN '{port_name_in}': {e}")
 
-        # Intentar abrir como salida
+    # Abrir puertos de SALIDA
+    for alias in required_outputs:
+        if not alias: continue
         port_name_out = find_port_by_substring(mido_outputs, alias)
         if port_name_out and not any(p_info.get("obj") and p_info["obj"].name == port_name_out for p_info in opened_ports_tracking.values()):
             try:
                 out_port_obj = mido.open_output(port_name_out)
-                opened_ports_tracking[port_name_out] = {"obj": out_port_obj, "type": "out", "alias_used": alias}
+                opened_ports_tracking[port_name_out] = {
+                    "obj": out_port_obj, "type": "out", "alias_used": alias,
+                    "last_in_msg_str": "", "last_in_msg_time": 0,
+                    "last_out_msg_str": "", "last_out_msg_time": 0, "activity_time": 0
+                }
                 print(f"  - [OPEN-OUT] Abierto '{port_name_out}' (requerido por '{alias}')")
                 if alias == global_device_aliases.get("TPT_out"):
                     transport_out_port_obj = out_port_obj
             except Exception as e:
                 print(f"  [!] Error abriendo OUT '{port_name_out}': {e}")
+    # --- FIN DE LA NUEVA LÓGICA ---
 
     # --- Finalización ---
     active_filters_final = [f for f in all_loaded_filters if f.get("device_in") is None or any(global_device_aliases.get(f.get("device_in"), f.get("device_in")).lower() in name.lower() for name in active_input_handlers)]
@@ -2583,17 +3058,397 @@ def reload_all_configuration(base_dir, is_virtual_mode, vp_in_name, vp_out_name)
     return active_filters, virtual_port_ref
 
 
+def _process_single_loop_iteration(is_live_mode, rules_base_dir, virtual_port_mode_active, virtual_input_name, virtual_output_name, virtual_output_port_object_ref):
+    """
+    Ejecuta una única pasada de la lógica principal de procesamiento de eventos.
+    Maneja la entrada de teclado SOLO cuando está en modo monitor (no TUI).
+    """
+    global shutdown_flag, current_active_version, available_versions, monitor_active, all_loaded_filters, \
+           global_device_aliases, opened_ports_tracking, midimaster_assumed_status, reload_queue, \
+           tui_last_osc_msg_str, tui_last_osc_msg_time, active_input_handlers, all_loaded_osc_filters, \
+           sequencers_state, arpeggiator_instances, transport_out_port_obj, clock_tick_counters
+
+    # 1. Comprobar si hay una solicitud de recarga y la ejecuta.
+    if is_live_mode and not reload_queue.empty():
+        if reload_queue.get() == "reload":
+            all_loaded_filters, virtual_output_port_object_ref = reload_all_configuration(
+                rules_base_dir, virtual_port_mode_active, virtual_input_name, virtual_output_name
+            )
+    
+    # --- MANEJO DE TECLADO (SOLO EN MODO MONITOR) ---
+    if monitor_active:
+        char_input = get_char_non_blocking()
+        if char_input:
+            if char_input.lower() == 'm':
+                return "toggle_monitor"
+
+    # 2. Procesamiento de eventos (se ejecuta en ambos modos: TUI y Monitor).
+    
+            prev_active_version_kb = current_active_version
+            version_changed_by_kb = False
+            
+            if char_input.isdigit():
+                new_version_attempt = int(char_input)
+                if new_version_attempt in available_versions:
+                    if current_active_version != new_version_attempt:
+                        current_active_version = new_version_attempt
+                        version_changed_by_kb = True
+            elif char_input == ' ':
+                if available_versions:
+                    try: current_idx = available_versions.index(current_active_version)
+                    except ValueError: current_idx = -1
+                    current_active_version = available_versions[(current_idx + 1) % len(available_versions)]
+                    version_changed_by_kb = True
+            elif (char_input == '\r' or char_input == '\n'): # TECLA ENTER
+                if transport_out_port_obj:
+                    try:
+                        if midimaster_assumed_status == "STOPPED":
+                            msg_to_send = mido.Message('start')
+                            transport_out_port_obj.send(msg_to_send)
+                            _update_tui_port_out_data(transport_out_port_obj, msg_to_send, "TPT_out")
+                            midimaster_assumed_status = "PLAYING"
+                            print(f"[!] Comando START enviado a TPT")
+                        elif midimaster_assumed_status == "PLAYING":
+                            msg_to_send = mido.Message('stop')
+                            transport_out_port_obj.send(msg_to_send)
+                            _update_tui_port_out_data(transport_out_port_obj, msg_to_send, "TPT_out")
+                            midimaster_assumed_status = "STOPPED"
+                            global_panic()
+                            print(f"[!] Comando STOP enviado a TPT")
+                    except Exception as e:
+                        print(f"[!] Error enviando comando a TPT: {e}")
+                else:
+                    print(f"[!] Puerto TPT no disponible.")
+            
+            if version_changed_by_kb and current_active_version != prev_active_version_kb:
+                print(f"[*] Versión {current_active_version}/{len(available_versions) - 1}")
+                process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
+            elif version_changed_by_kb and char_input.isdigit() and current_active_version == prev_active_version_kb:
+                print(f"[*] Versión '{char_input}' no disponible o ya activa. Actual: V{current_active_version}.")
+
+    # Procesamiento de OSC
+    while not osc_message_queue.empty():
+        address, args = osc_message_queue.get()
+        tui_last_osc_msg_str = f"{address} {list(args)}"
+        tui_last_osc_msg_time = time.time()
+        if monitor_active:
+            print(f"IN:  OSC '{address}' {list(args)}")
+        for osc_filter_config in all_loaded_osc_filters:
+            outputs_from_this_filter = process_osc_event_new_logic(
+                address, args, osc_filter_config,
+                current_active_version, global_device_aliases, opened_ports_tracking,
+                virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name
+            )
+            if outputs_from_this_filter:
+                for (msg_to_send, dest_port_obj, alias_log, rule_log, _, _) in outputs_from_this_filter:
+                    if dest_port_obj and hasattr(dest_port_obj, "send"):
+                        dest_port_obj.send(msg_to_send)
+                        if monitor_active:
+                            log_line = format_midi_message_for_log(
+                                msg_to_send, prefix="  ⇢ OUT: ", active_version=current_active_version,
+                                rule_id_source=rule_log, target_port_alias_for_log_output=alias_log
+                            )
+                            if log_line: print(log_line)
+
+    # Procesamiento de MIDI
+    incoming_messages_this_cycle = []
+    for port_full_name, mido_in_port_obj in active_input_handlers.items():
+        for msg in mido_in_port_obj.iter_pending():
+            incoming_messages_this_cycle.append({'msg': msg, 'port_name': port_full_name})
+            if port_full_name in opened_ports_tracking:
+                port_info = opened_ports_tracking[port_full_name]
+                formatted_msg = format_midi_message_for_log(msg, prefix="")
+                port_info["last_in_msg_str"] = formatted_msg if formatted_msg is not None else msg.type.title()
+                now = time.time()
+                port_info["last_in_msg_time"] = now
+                port_info["activity_time"] = now
+    
+    # --- CORRECCIÓN: Mover la inicialización de estas variables aquí ---
+    all_generated_outputs_this_cycle = []
+    version_change_request = None
+    
+    if incoming_messages_this_cycle:
+        version_before_action = current_active_version
+        other_messages_to_process = []
+        for event in incoming_messages_this_cycle:
+            msg = event['msg']
+            port_name = event['port_name']
+            if msg.type in ['start', 'stop', 'continue', 'reset', 'clock']:
+                if port_name not in clock_tick_counters:
+                    clock_tick_counters[port_name] = 0
+                msg_type_for_modules = msg.type
+                if msg.type == 'clock' and midimaster_assumed_status == "STOPPED":
+                    if monitor_active: print("[*] Primer tick de reloj recibido. Auto-arranque...")
+                    midimaster_assumed_status = "PLAYING"
+                    msg_type_for_modules = 'start'
+                if msg_type_for_modules == 'start':
+                    clock_tick_counters[port_name] = 0
+                    midimaster_assumed_status = "PLAYING"
+                elif msg_type_for_modules == 'stop':
+                    midimaster_assumed_status = "STOPPED"
+                    global_panic()
+                if msg.type == 'clock' and midimaster_assumed_status == "PLAYING":
+                    clock_tick_counters[port_name] += 1
+                for i, seq_state in enumerate(sequencers_state):
+                    if seq_state['clock_in_port_name'] and seq_state['clock_in_port_name'].lower() in port_name.lower():
+                        if msg_type_for_modules == 'start':
+                            seq_conf = seq_state['config']
+                            if not seq_conf.get("quantize_start"):
+                                seq_state['is_playing'] = True; seq_state['tick_counter'] = 0; seq_state['last_known_tick'] = -1
+                                _silence_instance(seq_state, f"SEQ[{i}] start"); _rebuild_sequencer_schedule(i, seq_state)
+                                if monitor_active: print(f"SQ[{i}] Start (transport/auto)")
+                            else:
+                                if not seq_state['is_playing'] and not seq_state['is_armed']:
+                                    seq_state['is_armed'] = True
+                                    display_grid = seq_conf.get("quantize_start");
+                                    if not isinstance(display_grid, str): display_grid = "grid"
+                                    if monitor_active: print(f"SQ[{i}] ARMED by transport/auto (waiting for '{display_grid}')")
+                        elif msg_type_for_modules in ['stop', 'reset']:
+                            seq_state['is_playing'] = False; seq_state['is_armed'] = False
+                            if monitor_active: print(f"SQ[{i}] Stop")
+                        elif msg_type_for_modules == 'continue':
+                            seq_state['is_playing'] = True
+                            if monitor_active: print(f"SQ[{i}] Continue")
+                        if msg.type == 'clock' and seq_state['is_playing']:
+                            seq_state['tick_counter'] += 1
+                for key, instance in arpeggiator_instances.items():
+                    arp_clock_in_alias = instance['config'].get('clock_in', instance['config'].get('device_in'))
+                    if arp_clock_in_alias:
+                        arp_clock_in_substr = global_device_aliases.get(arp_clock_in_alias, arp_clock_in_alias)
+                        if arp_clock_in_substr.lower() in port_name.lower():
+                            if msg_type_for_modules == 'start':
+                                if not instance['config'].get("quantize_start"):
+                                    instance['is_playing'] = True; instance['tick_counter'] = 0; instance['active_step'] = 0; instance['pending_note_offs'].clear()
+                                    if monitor_active: print(f"ARP[{key[0]},{key[1]}] Start (transport/auto)")
+                            elif msg_type_for_modules in ['stop', 'reset']:
+                                instance['is_playing'] = False; instance['is_armed'] = False
+                                if monitor_active: print(f"ARP[{key[0]},{key[1]}] Stop")
+                            elif msg_type_for_modules == 'continue':
+                                instance['is_playing'] = True
+                                if monitor_active: print(f"ARP[{key[0]},{key[1]}] Continue")
+                            if msg.type == 'clock' and instance['is_playing']:
+                                instance['tick_counter'] += 1
+            else:
+                other_messages_to_process.append(event)
+        
+        for event in other_messages_to_process:
+            original_input_msg = event['msg']
+            port_full_name = event['port_name']
+            for event_filter_config in all_loaded_filters:
+                outputs_from_this_filter, version_action = process_midi_event_new_logic(
+                    original_input_msg, port_full_name, event_filter_config,
+                    current_active_version, global_device_aliases, opened_ports_tracking,
+                    virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name
+                )
+                if outputs_from_this_filter:
+                    all_generated_outputs_this_cycle.extend(outputs_from_this_filter)
+                if version_action is not None and version_change_request is None:
+                    version_change_request = version_action
+                    if monitor_active:
+                        filter_id_str = event_filter_config.get('_filter_id_str', 'ID?')
+                        log_in_vchange = format_midi_message_for_log(original_input_msg, "IN: ", version_before_action,
+                                                                  rule_id_source=filter_id_str,
+                                                                  input_port_actual_name=port_full_name,
+                                                                  device_aliases_global_map=global_device_aliases)
+                        if log_in_vchange:
+                            raw_set_version = event_filter_config.get('set_version', 'N/A')
+                            print(f"{log_in_vchange} ⇢ (set_version: '{raw_set_version}' -> '{version_action}')")
+        
+        if all_generated_outputs_this_cycle:
+            for (msg_to_send, dest_port_obj, dest_alias_str, _, sent_event_type_str, _) in all_generated_outputs_this_cycle:
+                if dest_port_obj and hasattr(dest_port_obj, "send"):
+                    try:
+                        dest_port_obj.send(msg_to_send)
+                        _update_tui_port_out_data(dest_port_obj, msg_to_send, dest_alias_str)
+                        if sent_event_type_str == 'control_change':
+                            cc_value_sent[(msg_to_send.channel, msg_to_send.control)] = msg_to_send.value
+                    except Exception as e_send:
+                        print(f"  ERR SEND: {e_send}")
+        
+        if monitor_active:
+            for event in other_messages_to_process:
+                log_line = format_midi_message_for_log(
+                    event['msg'], prefix="IN: ", active_version=current_active_version,
+                    input_port_actual_name=event['port_name'], device_aliases_global_map=global_device_aliases
+                )
+                if log_line:
+                    suffix = ""
+                    if not all_generated_outputs_this_cycle:
+                        was_sent_to_arp = False
+                        for f_conf in all_loaded_filters:
+                            if "arp_id" in f_conf.get("output", [{}])[0]:
+                                dev_in_alias = f_conf.get("device_in")
+                                if dev_in_alias:
+                                    dev_in_sub = global_device_aliases.get(dev_in_alias, dev_in_alias)
+                                    if dev_in_sub.lower() in event['port_name'].lower():
+                                        was_sent_to_arp = True
+                                        break
+                        if not was_sent_to_arp:
+                            suffix = " ⇢ [NOUT]"
+                    print(f"{log_line}{suffix}")
+            for out_m_log, _, alias_log, rule_log, _, _ in all_generated_outputs_this_cycle:
+                log_msg_output_formatted = format_midi_message_for_log(
+                    out_m_log, prefix="  ⇢ OUT: ", active_version=current_active_version,
+                    rule_id_source=rule_log, target_port_alias_for_log_output=alias_log
+                )
+                if log_msg_output_formatted:
+                    print(log_msg_output_formatted)
+        
+        if version_change_request is not None:
+            new_version = -1
+            action_value = version_change_request
+            if isinstance(action_value, str):
+                action_lower = action_value.lower()
+                if available_versions:
+                    try:
+                        current_idx = available_versions.index(current_active_version)
+                        if action_lower in ["cycle", "cycle_next"]:
+                            new_version = available_versions[(current_idx + 1) % len(available_versions)]
+                        elif action_lower == "cycle_previous":
+                            new_version = available_versions[(current_idx - 1 + len(available_versions)) % len(available_versions)]
+                    except ValueError:
+                        if available_versions: new_version = available_versions[0]
+            elif isinstance(action_value, int):
+                if action_value in available_versions:
+                    new_version = action_value
+            if new_version != -1 and new_version != current_active_version:
+                current_active_version = new_version
+            if not monitor_active:
+                if tui_app and not tui_app.is_done:
+                    tui_app.invalidate()
+            process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
+
+    armed_modules_to_check = []
+    for i, s_state in enumerate(sequencers_state):
+        if s_state.get('is_armed'):
+            armed_modules_to_check.append({'type': 'seq', 'state': s_state, 'id': i})
+    for key, a_state in arpeggiator_instances.items():
+        if a_state.get('is_armed'):
+            armed_modules_to_check.append({'type': 'arp', 'state': a_state, 'id': key})
+    if armed_modules_to_check:
+        for mod in armed_modules_to_check:
+            state = mod['state']
+            config = state['config']
+            quantize_config = config.get("quantize_start")
+            grid_to_use = None
+            if isinstance(quantize_config, str):
+                grid_to_use = quantize_config
+            elif quantize_config is True:
+                grid_to_use = "1/16" 
+            if not grid_to_use:
+                state['is_armed'] = False
+                continue
+            clock_alias_expr = config.get('device_in')
+            if not clock_alias_expr: continue
+            clock_alias = get_evaluated_value_from_output_config(clock_alias_expr, None, state.get('eval_context',{}), "quantize_launch", "device_in")
+            if not clock_alias: continue
+            clock_port_name = None
+            for p_name, p_info in opened_ports_tracking.items():
+                if p_info.get('alias_used') == clock_alias:
+                    clock_port_name = p_name
+                    break
+            if not clock_port_name:
+                 resolved_substring = global_device_aliases.get(clock_alias, clock_alias)
+                 for p_name in opened_ports_tracking.keys():
+                      if resolved_substring.lower() in p_name.lower():
+                           clock_port_name = p_name
+                           break
+            if not clock_port_name:
+                if monitor_active: print(f"Adv: No se pudo encontrar un puerto abierto para el reloj '{clock_alias}' del módulo {mod['id']}. No se puede lanzar cuantizado.")
+                continue
+            master_ticks = clock_tick_counters.get(clock_port_name, 0)
+            ppqn = int(config.get('ppqn', 24))
+            ticks_for_quantize = parse_step_duration(grid_to_use, ppqn)
+            if ticks_for_quantize > 0 and master_ticks % ticks_for_quantize == 0:
+                state['is_playing'] = True
+                state['is_armed'] = False
+                state['tick_counter'] = 0
+                state['active_step'] = 0
+                if monitor_active: # Only print logs if in monitor mode
+                    id_str = f"{mod['type'].upper()}[{mod['id']}]"
+                    print(f"[*] {id_str} LAUNCHED (cuantizado a {grid_to_use})")
+
+    for i, seq_state in enumerate(sequencers_state):
+        if not seq_state.get('is_playing', False):
+            continue
+        if seq_state.get('schedule_needs_rebuild'):
+            _rebuild_sequencer_schedule(i, seq_state)
+        current_tick = seq_state['tick_counter']
+        cycle_duration = seq_state.get('current_cycle_duration', 0)
+        if cycle_duration > 0 and current_tick >= cycle_duration:
+            seq_state['tick_counter'] -= cycle_duration
+            current_tick = seq_state['tick_counter']
+            seq_state['last_known_tick'] -= cycle_duration
+            adjusted_offs = []
+            for fire_at, msg, port, alias in seq_state['pending_note_offs']:
+                adjusted_offs.append((fire_at - cycle_duration, msg, port, alias))
+            seq_state['pending_note_offs'] = adjusted_offs
+            _rebuild_sequencer_schedule(i, seq_state)
+        due_note_offs = [item for item in seq_state['pending_note_offs'] if current_tick >= item[0]]
+        if due_note_offs:
+            seq_state['pending_note_offs'] = [item for item in seq_state['pending_note_offs'] if item not in due_note_offs]
+            for _, msg, port, alias in due_note_offs:
+                try:
+                    port.send(msg)
+                    if monitor_active: # Only print logs if in monitor mode
+                        log_prefix = f"  \u21E2 SQ[{i}] off:"
+                        log_line = format_midi_message_for_log(msg, log_prefix, current_active_version, None, alias)
+                        if log_line: print(log_line)
+                except Exception as e:
+                    print(f"Err sending scheduled note_off: {e}")
+        schedule = seq_state.get('event_schedule', [])
+        for event_to_fire in schedule:
+            if event_to_fire['fire_at'] <= current_tick and event_to_fire['fire_at'] > seq_state['last_known_tick']:
+                seq_state['active_step'] = event_to_fire['step']
+                process_sequencer_step(i, seq_state, event_to_fire['fire_at'], opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
+                seq_state['last_known_tick'] = event_to_fire['fire_at']
+
+    arp_instances_to_remove = []
+    for instance_key, instance_state in list(arpeggiator_instances.items()):
+        arp_conf = instance_state['config']
+        due_note_offs = [item for item in instance_state['pending_note_offs'] if instance_state['tick_counter'] >= item[0]]
+        for item in due_note_offs:
+            _, msg, port, alias = item
+            try: port.send(msg)
+            except Exception: pass
+            if item in instance_state['pending_note_offs']:
+                instance_state['pending_note_offs'].remove(item)
+        if instance_state['is_playing']:
+            ppqn = int(arp_conf.get('ppqn', ARP_DEFAULTS['ppqn']))
+            step_duration = arp_conf.get('step_duration', ARP_DEFAULTS['step_duration'])
+            ticks_for_step = parse_step_duration(step_duration, ppqn)
+            if ticks_for_step > 0 and instance_state['tick_counter'] >= ticks_for_step:
+                pattern = instance_state.get('arp_pattern', [])
+                if pattern:
+                   current_tick_snapshot = instance_state['tick_counter']
+                   process_arpeggiator_step(instance_key, instance_state, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name, current_tick_snapshot)
+                   instance_state['tick_counter'] -= ticks_for_step
+                   current_step = instance_state.get('active_step', 0)
+                   pattern_len = len(pattern)
+                   next_step = (current_step + 1) % pattern_len
+                   instance_state['active_step'] = next_step if pattern_len > 0 else 0
+        elif not instance_state['is_playing'] and not instance_state['input_notes'] and not instance_state['pending_note_offs']:
+            arp_instances_to_remove.append(instance_key)
+    for key in arp_instances_to_remove:
+        if key in arpeggiator_instances:
+            del arpeggiator_instances[key]
+            if monitor_active: print(f"     ⇢ ARP: Instancia {key} eliminada.")
+
+    # Si no se detectó un cambio de modo, devuelve None.
+    return None
 
 # --- Main Application ---
+
+
 def main():
     global shutdown_flag, current_active_version, available_versions, RULES_DIR, monitor_active, global_device_aliases
     global cc_value_sent, cc_value_control, user_variables, midimaster_assumed_status, sequencers_state
-    global all_loaded_osc_filters 
+    global all_loaded_osc_filters, reload_queue 
 
     initialize_state() 
     signal.signal(signal.SIGINT, signal_handler)
 
-    script_version = "1.40" # Actualizar versión
+    script_version = "1.40"
     help_desc = f"""MIDImod {script_version}: Procesador MIDI avanzado con transformaciones y enrutamiento flexible."""
     help_epilog = f"""
 -------------------------------------------------------------------------------
@@ -2624,7 +3479,7 @@ MIDImod {script_version} - Command Line & Interactive Controls
     Specify custom names for the virtual input and output ports.
 
   `--no-log`
-    Starts without the real-time MIDI monitor.
+    Starts without the real-time MIDI monitor. By default, this will launch the TUI.
 
   `--verbose`
     Enables detailed logging for module loading and value evaluation.
@@ -2650,7 +3505,7 @@ MIDImod {script_version} - Command Line & Interactive Controls
 
   `[Spacebar]`   : Cycles to the next available 'version'.
   `[0-9]`        : Jumps directly to a specific 'version' number.
-  `m`            : Toggles the MIDI monitor log on/off.
+  `m`            : Toggles between the TUI and the real-time MIDI monitor log.
   `[Enter]`      : Sends Start/Stop transport commands to the port
                  aliased as 'TPT_out' in your JSON files.
   `[Ctrl+C]`     : Safely shuts down the script.
@@ -2666,8 +3521,7 @@ MIDImod {script_version} - Command Line & Interactive Controls
     parser.add_argument("rule_files", nargs='*', default=None, 
                         help=f"Nombres base (sin .json) de archivos de reglas de './{RULES_DIR_NAME}/'. Si no se da, se abre selector interactivo.")
     parser.add_argument("--list-ports", action="store_true", help="Lista puertos MIDI y sale.")
-    parser.add_argument("--no-log", action="store_false", dest="monitor_active_cli", default=True, help="Desactiva monitor MIDI al inicio.")
-
+    parser.add_argument("--no-log", action="store_false", dest="monitor_active_cli", default=True, help="Desactiva monitor MIDI al inicio, lanzando la TUI.")
     parser.add_argument("--virtual-ports", action="store_true", help="Activa el modo de puertos MIDI virtuales.")
     parser.add_argument("--vp-in", type=str, default="MIDImod_IN", metavar="NOMBRE", help="Puerto MIDI virtual de ENTRADA (default: MIDImod_IN).")
     parser.add_argument("--vp-out", type=str, default="MIDImod_OUT", metavar="NOMBRE", help="Puerto MIDI virtual de SALIDA (default: MIDImod_OUT).")
@@ -2683,10 +3537,9 @@ MIDImod {script_version} - Command Line & Interactive Controls
     is_live_mode = args.live
     
     if is_live_mode:
-        print("[*] MODO LIVE ACTIVADO. Cargando reglas de la carpeta '/live'.")
+        rules_base_dir = LIVE_RULES_DIR
         LIVE_RULES_DIR.mkdir(parents=True, exist_ok=True)
         rule_file_names_to_load = [f.stem for f in LIVE_RULES_DIR.iterdir() if f.name.endswith('.json')]
-        rules_base_dir = LIVE_RULES_DIR
     else:
         rules_base_dir = RULES_DIR
         rule_file_names_to_load = args.rule_files
@@ -2707,16 +3560,12 @@ MIDImod {script_version} - Command Line & Interactive Controls
     virtual_input_name = args.vp_in
     virtual_output_name = args.vp_out
 
-    # Llamada a la función de carga que faltaba
-
     active_filters_final, virtual_output_port_object_ref = load_configuration(
         rule_file_names_to_load, rules_base_dir, virtual_port_mode_active,
         virtual_input_name, virtual_output_name
     )
 
-    # --- Iniciar servidor OSC ---
     start_osc_server()
-
 
     if not active_input_handlers and not osc_server_instance:
         print("\nNo hay puertos de ENTRADA (MIDI u OSC) activos. Saliendo.")
@@ -2727,497 +3576,140 @@ MIDImod {script_version} - Command Line & Interactive Controls
 
     summarize_active_processing_config(active_filters_final, global_device_aliases, opened_ports_tracking, {}, virtual_port_mode_active, virtual_input_name, virtual_output_name)
 
-    monitor_status_str = "activo" if monitor_active else "desactivado"
-
+    monitor_status_str = "activo" if monitor_active else "desactivado (TUI)"
 
     observer = None
     if is_live_mode:
         reload_queue = Queue()
         event_handler = RuleChangeHandler(reload_queue)
         observer = Observer()
-        observer.schedule(event_handler, str(LIVE_RULES_DIR), recursive=False)
+        observer.schedule(event_handler, str(rules_base_dir), recursive=False)
         observer.start()
-        print(f"[*] Vigilando la carpeta '{LIVE_RULES_DIR}' en busca de cambios...")
-
-        
+        print(f"[*] Vigilando la carpeta '{rules_base_dir}' en busca de cambios...")
 
     print(f"\n{len(active_filters_final)} filtro(s), {len(active_input_handlers)} puerto(s) IN. ")
-    if len(available_versions) > 1 or (len(available_versions)==1 and 0 not in available_versions) : # Mostrar si hay más de una o si la única no es 0
+    if len(available_versions) > 1 or (len(available_versions)==1 and 0 not in available_versions) :
         print(f"Versión {current_active_version}/{len(available_versions) - 1} (cambiar con [0-{len(available_versions) - 1}], [Espacio]).")
-    print(f"Monitor {monitor_status_str} (cambiar con 'm').")
+    print(f"Monitor {monitor_status_str} ('m' para desactivar el monitor y activar TUI).")
     print("[!] Ctrl+C para salir. Procesando... \n")
 
     version_log_header=f"[*] Versión {current_active_version}/{len(available_versions) - 1}" if len(available_versions) > 1 else ""
-    print(version_log_header)
+    if monitor_active:
+        print(version_log_header)
     process_version_activated_filters(current_active_version, active_filters_final, global_device_aliases, opened_ports_tracking,
                                     virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
 
-
     try:
         while not shutdown_flag:
-            # 1. El hilo principal comprueba si hay una solicitud de recarga y la ejecuta.
-            if is_live_mode and not reload_queue.empty():
-                if reload_queue.get() == "reload":
-                    active_filters_final, virtual_output_port_object_ref = reload_all_configuration(
-                        LIVE_RULES_DIR, virtual_port_mode_active, virtual_input_name, virtual_output_name
-                    )
-            
-            # 2. El hilo principal continúa con su trabajo normal.
-            # --- MANEJO DE TECLADO ---
-            kb_char_processed_this_loop = False
-            char_input = get_char_non_blocking()
-            if char_input:
-                kb_char_processed_this_loop = True
-                # ... (toda la lógica del teclado se queda igual que antes)
-                prev_active_version_kb = current_active_version
-                version_changed_by_kb = False
+            if monitor_active:
+                # --- MODO LOG ---
+                result = _process_single_loop_iteration(
+                    is_live_mode, rules_base_dir, virtual_port_mode_active,
+                    virtual_input_name, virtual_output_name, virtual_output_port_object_ref
+                )
+                if result == "toggle_monitor":
+                    monitor_active = False # Cambiar estado para la próxima iteración del bucle
+                    print("\033[H\033[J", end="") # Limpiar para la transición
+                time.sleep(0.001)
+            else:
+                # --- MODO TUI (SIN PARPADEO) ---
+                kb = KeyBindings()
                 
-                if char_input.isdigit():
-                    new_version_attempt = int(char_input)
-                    if new_version_attempt in available_versions:
-                        if current_active_version != new_version_attempt:
-                            current_active_version = new_version_attempt
-                            version_changed_by_kb = True
-                elif char_input == ' ':
+                @kb.add("c-c", eager=True)
+                @kb.add("q", eager=True)
+                def _(event):
+                    """ Salir de la aplicación. """
+                    global shutdown_flag
+                    shutdown_flag = True
+                    event.app.exit()
+
+                @kb.add("m", eager=True)
+                def _(event):
+                    """ Alternar al modo monitor. """
+                    global monitor_active
+                    monitor_active = True
+                    event.app.exit(result="toggle_monitor")
+
+                @kb.add(" ", eager=True)
+                def _(event):
+                    """ Ciclar a la siguiente versión disponible. """
+                    global current_active_version, available_versions
                     if available_versions:
                         try: current_idx = available_versions.index(current_active_version)
                         except ValueError: current_idx = -1
                         current_active_version = available_versions[(current_idx + 1) % len(available_versions)]
-                        version_changed_by_kb = True
-                elif char_input.lower() == 'm':
-                    monitor_active = not monitor_active
-                    print(f"[*] Monitor {'activado' if monitor_active else 'desactivado'}")
-                elif (char_input == '\r' or char_input == '\n'): # TECLA ENTER
+                        process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
+                    # No es necesario invalidar aquí, el inputhook lo hará.
+
+                for digit in "0123456789":
+                    @kb.add(digit, eager=True)
+                    def _(event, d=digit):
+                        """ Saltar directamente a una versión específica. """
+                        global current_active_version, available_versions
+                        new_version_attempt = int(d)
+                        if new_version_attempt in available_versions:
+                            if current_active_version != new_version_attempt:
+                                current_active_version = new_version_attempt
+                                process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
+                        # No es necesario invalidar aquí, el inputhook lo hará.
+
+                @kb.add("enter", eager=True)
+                def _(event):
+                    """ Enviar comandos de transporte Start/Stop. """
+                    global transport_out_port_obj, midimaster_assumed_status, tui_last_osc_msg_str, tui_last_osc_msg_time
                     if transport_out_port_obj:
                         try:
                             if midimaster_assumed_status == "STOPPED":
-                                transport_out_port_obj.send(mido.Message('start'))
+                                msg_to_send = mido.Message('start')
+                                transport_out_port_obj.send(msg_to_send)
+                                _update_tui_port_out_data(transport_out_port_obj, msg_to_send, "TPT_out")
                                 midimaster_assumed_status = "PLAYING"
-                                print(f"[!] Comando START enviado a TPT")
                             elif midimaster_assumed_status == "PLAYING":
-                                transport_out_port_obj.send(mido.Message('stop'))
+                                msg_to_send = mido.Message('stop')
+                                transport_out_port_obj.send(msg_to_send)
+                                _update_tui_port_out_data(transport_out_port_obj, msg_to_send, "TPT_out")
                                 midimaster_assumed_status = "STOPPED"
-                                print(f"[!] Comando STOP enviado a TPT")
+                                global_panic()
                         except Exception as e:
-                            print(f"[!] Error enviando comando a TPT: {e}")
-                    elif monitor_active: # Solo loguear si el monitor está activo y no hay puerto
-                        print(f"[!] Puerto TPT no disponible.")
+                            tui_last_osc_msg_str = f"ERROR TPT: {e}"
+                            tui_last_osc_msg_time = time.time()
+                    else:
+                        tui_last_osc_msg_str = f"ERROR: Puerto TPT no disponible."
+                        tui_last_osc_msg_time = time.time()
+                    # No es necesario invalidar aquí, el inputhook lo hará.
+
+                global tui_app
                 
-                if version_changed_by_kb and current_active_version != prev_active_version_kb:
-                    print(f"[*] Versión {current_active_version}/{len(available_versions) - 1}")
-                    process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
-                elif version_changed_by_kb and char_input.isdigit() and current_active_version == prev_active_version_kb : 
-                    print(f"[*] Versión '{char_input}' no disponible o ya activa. Actual: V{current_active_version}.")
-
-
-            osc_processed_this_loop = False
-            while not osc_message_queue.empty():
-                osc_processed_this_loop = True
-                address, args = osc_message_queue.get()
-
-                if monitor_active:
-                    # Imprimir el log de entrada OSC.
-                    # El log de la acción (ej. ⇢ SET) se generará automáticamente desde el motor de filtros.
-                    print(f"IN:  OSC '{address}' {list(args)}")
-
-                # Iterar por todos los filtros OSC y procesarlos con el motor unificado
-                for osc_filter_config in all_loaded_osc_filters:
-                    outputs_from_this_filter = process_osc_event_new_logic(
-                        address, args, osc_filter_config,
-                        current_active_version, global_device_aliases, opened_ports_tracking,
-                        virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name
+                def tui_input_hook(context):
+                    """Esta función se ejecuta repetidamente mientras la TUI espera input."""
+                    # 1. Ejecutar nuestra lógica de fondo, que actualiza el estado global.
+                    _process_single_loop_iteration(
+                        is_live_mode, rules_base_dir, virtual_port_mode_active,
+                        virtual_input_name, virtual_output_name, virtual_output_port_object_ref
                     )
                     
-                    # Si el filtro OSC genera mensajes MIDI, enviarlos y loguearlos
-                    if outputs_from_this_filter:
-                        for (msg_to_send, dest_port_obj, alias_log, rule_log, _, _) in outputs_from_this_filter:
-                            if dest_port_obj and hasattr(dest_port_obj, "send"):
-                                dest_port_obj.send(msg_to_send)
-                                if monitor_active:
-                                    log_line = format_midi_message_for_log(
-                                        msg_to_send, prefix="  ⇢ OUT: ", active_version=current_active_version,
-                                        rule_id_source=rule_log, target_port_alias_for_log_output=alias_log
-                                    )
-                                    if log_line: print(log_line)
-                                    
+                    tui_app.invalidate()
 
-                                    
+                    # 3. Una pequeña pausa para no consumir 100% de CPU.
+                    time.sleep(0.02)
 
-            # --- 2. PROCESAMIENTO MIDI (ESTRUCTURA CORREGIDA) ---
-
-            
-            incoming_messages_this_cycle = []
-            for port_full_name, mido_in_port_obj in active_input_handlers.items():
-                for msg in mido_in_port_obj.iter_pending():
-                    incoming_messages_this_cycle.append({'msg': msg, 'port_name': port_full_name})
-            
-            midi_event_processed_this_loop = bool(incoming_messages_this_cycle)
-            all_generated_outputs_this_cycle = []
-            version_change_request = None
-            
-            if midi_event_processed_this_loop:
-                version_before_action = current_active_version
+                # CORRECCIÓN: Crear la aplicación SIN el inputhook
+                tui_app = Application(
+                    layout=_create_tui_layout(), 
+                    key_bindings=kb, 
+                    full_screen=True, 
+                    mouse_support=False
+                )
                 
-                other_messages_to_process = []
+                # CORRECCIÓN: Pasar el inputhook al método .run()
+                result = tui_app.run(inputhook=tui_input_hook)
 
-                for event in incoming_messages_this_cycle:
-                    msg = event['msg']
-                    port_name = event['port_name']
-                    is_transport_msg = msg.type in ['start', 'stop', 'continue', 'reset', 'clock']
+                if result != "toggle_monitor":
+                    shutdown_flag = True
 
-
-                    if is_transport_msg:
-                        # --- 1. Lógica de contadores maestros (para cuantización) ---
-                        # Inicializar contador si es la primera vez que vemos este puerto de reloj
-                        if port_name not in clock_tick_counters:
-                            clock_tick_counters[port_name] = 0
-                        
-                        if msg.type == 'start':
-                            clock_tick_counters[port_name] = 0
-                            midimaster_assumed_status = "PLAYING"
-                        elif msg.type == 'stop':
-                            midimaster_assumed_status = "STOPPED"
-                        elif msg.type == 'clock' and midimaster_assumed_status == "PLAYING":
-                            clock_tick_counters[port_name] += 1
-
-
-                        # --- 2. Lógica de distribución a módulos (para reproducción) ---
-                        # Distribuir a Sequencers
-                        for i, seq_state in enumerate(sequencers_state):
-                            if seq_state['clock_in_port_name'] and seq_state['clock_in_port_name'].lower() in port_name.lower():
-                                if msg.type == 'start':
-                                    seq_conf = seq_state['config']
-                                    # Si no se cuantiza, arranca inmediatamente
-                                    if not seq_conf.get("quantize_start"):
-                                        seq_state['is_playing'] = True
-                                        seq_state['tick_counter'] = 0
-                                        seq_state['last_known_tick'] = -1
-                                        _silence_instance(seq_state, f"SEQ[{i}] start")
-                                        _rebuild_sequencer_schedule(i, seq_state) # Reconstruir inmediatamente
-                                        if monitor_active: print(f"SQ[{i}] Start (transport)")
-                                    # Si se cuantiza, simplemente se "arma"
-                                    else:
-                                        if not seq_state['is_playing'] and not seq_state['is_armed']:
-                                            seq_state['is_armed'] = True
-                                            display_grid = seq_conf.get("quantize_start")
-                                            if not isinstance(display_grid, str): display_grid = "grid"
-                                            if monitor_active: print(f"SQ[{i}] ARMED by transport (waiting for '{display_grid}')")
-
-                                elif msg.type in ['stop', 'reset']:
-                                    seq_state['is_playing'] = False
-                                    seq_state['is_armed'] = False # Desarmar si se detiene el transporte
-                                    if monitor_active: print(f"SQ[{i}] Stop")
-                                    # ... (lógica para enviar note_offs pendientes)
-                                elif msg.type == 'continue':
-                                    seq_state['is_playing'] = True
-                                    if monitor_active: print(f"SQ[{i}] Continue")
-                                elif msg.type == 'clock' and seq_state['is_playing']:
-                                    seq_state['tick_counter'] += 1
-                        
-                        # Distribuir a Arpegiadores
-                        for key, instance in arpeggiator_instances.items():
-                            arp_clock_in_alias = instance['config'].get('clock_in', instance['config'].get('device_in'))
-                            if arp_clock_in_alias:
-                                arp_clock_in_substr = global_device_aliases.get(arp_clock_in_alias, arp_clock_in_alias)
-                                if arp_clock_in_substr.lower() in port_name.lower():
-                                    if msg.type == 'start':
-                                        if not instance['config'].get("quantize_start"):
-                                            instance['is_playing'] = True; instance['tick_counter'] = 0; instance['active_step'] = 0; instance['pending_note_offs'].clear()
-                                            if monitor_active: print(f"ARP[{key[0]},{key[1]}] Start (transport)")
-                                    elif msg.type in ['stop', 'reset']:
-                                        instance['is_playing'] = False
-                                        instance['is_armed'] = False # Desarmar si se detiene
-                                        if monitor_active: print(f"ARP[{key[0]},{key[1]}] Stop")
-                                        # ... (lógica para enviar note_offs pendientes)
-                                    elif msg.type == 'continue':
-                                        instance['is_playing'] = True
-                                        if monitor_active: print(f"ARP[{key[0]},{key[1]}] Continue")
-                                    elif msg.type == 'clock' and instance['is_playing']:
-                                        instance['tick_counter'] += 1
-                    else:
-                        other_messages_to_process.append(event)
-
-                # 2.2 PROCESAR todos los mensajes restantes contra los filtros
-                for event in other_messages_to_process:
-                    original_input_msg = event['msg']
-                    port_full_name = event['port_name']
-
-                    for event_filter_config in active_filters_final:
-                        outputs_from_this_filter, version_action = process_midi_event_new_logic(
-                            original_input_msg, port_full_name, event_filter_config,
-                            current_active_version, global_device_aliases, opened_ports_tracking,
-                            virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name
-                        )
-                        if outputs_from_this_filter:
-                            all_generated_outputs_this_cycle.extend(outputs_from_this_filter)
-                        if version_action is not None and version_change_request is None:
-                            # ... (lógica de cambio de versión sin cambios) ...
-                            version_change_request = version_action
-                            if monitor_active:
-                                filter_id_str = event_filter_config.get('_filter_id_str', 'ID?')
-                                log_in_vchange = format_midi_message_for_log(original_input_msg, "IN: ", version_before_action,
-                                                                          rule_id_source=filter_id_str,
-                                                                          input_port_actual_name=port_full_name,
-                                                                          device_aliases_global_map=global_device_aliases)
-                                if log_in_vchange:
-                                    raw_set_version = event_filter_config.get('set_version', 'N/A')
-                                    print(f"{log_in_vchange} ⇢ (set_version: '{raw_set_version}' -> '{version_action}')")
-
-
-
-                # 2.3 ENVIAR todas las salidas generadas
-                if all_generated_outputs_this_cycle:
-                    for (msg_to_send, dest_port_obj, _, _,
-                         sent_event_type_str, _) in all_generated_outputs_this_cycle:
-                        if dest_port_obj and hasattr(dest_port_obj, "send"):
-                            try:
-                                dest_port_obj.send(msg_to_send)
-                                if sent_event_type_str == 'control_change':
-                                    cc_value_sent[(msg_to_send.channel, msg_to_send.control)] = msg_to_send.value
-                            except Exception as e_send:
-                                print(f"  ERR SEND: {e_send}")
-
-                # 2.4 LOGUEAR todo lo que pasó en este ciclo
-                if monitor_active:
-                    for event in other_messages_to_process:
-                        log_line = format_midi_message_for_log(
-                            event['msg'], prefix="IN: ", active_version=current_active_version,
-                            input_port_actual_name=event['port_name'], device_aliases_global_map=global_device_aliases
-                        )
-                        if log_line:
-                            suffix = ""
-                            if not all_generated_outputs_this_cycle:
-                                # Comprobar si se envió a un arpegiador (que no genera output inmediato)
-                                was_sent_to_arp = False
-                                for f_conf in active_filters_final:
-                                    # Esta es una comprobación simplificada pero efectiva
-                                    if "arp_id" in f_conf.get("output", [{}])[0]:
-                                        # Comprobamos si el filtro realmente se aplicó a este mensaje
-                                        dev_in_alias = f_conf.get("device_in")
-                                        if dev_in_alias:
-                                            dev_in_sub = global_device_aliases.get(dev_in_alias, dev_in_alias)
-                                            if dev_in_sub.lower() in event['port_name'].lower():
-                                                was_sent_to_arp = True
-                                                break
-                                if not was_sent_to_arp:
-                                    suffix = " ⇢ [NOUT]"
-                            
-                            print(f"{log_line}{suffix}")
-
-
-                    # Loguear las salidas generadas
-                    for out_m_log, _, alias_log, rule_log, _, _ in all_generated_outputs_this_cycle:
-                        log_msg_output_formatted = format_midi_message_for_log(
-                            out_m_log, prefix="  ⇢ OUT: ", active_version=current_active_version,
-                            rule_id_source=rule_log, target_port_alias_for_log_output=alias_log
-                        )
-                        if log_msg_output_formatted:
-                            print(log_msg_output_formatted)
-                
-                # 2.5 APLICAR cambio de versión si se solicitó
-                if version_change_request is not None:
-                    new_version = -1
-                    action_value = version_change_request
-                    if isinstance(action_value, str):
-                        action_lower = action_value.lower()
-                        if available_versions:
-                            try:
-                                current_idx = available_versions.index(current_active_version)
-                                if action_lower in ["cycle", "cycle_next"]:
-                                    new_version = available_versions[(current_idx + 1) % len(available_versions)]
-                                elif action_lower == "cycle_previous":
-                                    new_version = available_versions[(current_idx - 1 + len(available_versions)) % len(available_versions)]
-                            except ValueError:
-                                if available_versions: new_version = available_versions[0]
-                    elif isinstance(action_value, int):
-                        if action_value in available_versions:
-                            new_version = action_value
-                    
-                    if new_version != -1 and new_version != current_active_version:
-                        current_active_version = new_version
-                        version_changed_by_midi = True
-                    
-                    if version_changed_by_midi:
-                        print(f"[*] Versión {current_active_version}/{len(available_versions) - 1}")
-                        process_version_activated_filters(current_active_version, all_loaded_filters, global_device_aliases, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
-
-            armed_modules_to_check = []
-            for i, s_state in enumerate(sequencers_state):
-                if s_state.get('is_armed'):
-                    armed_modules_to_check.append({'type': 'seq', 'state': s_state, 'id': i})
-            for key, a_state in arpeggiator_instances.items():
-                if a_state.get('is_armed'):
-                    armed_modules_to_check.append({'type': 'arp', 'state': a_state, 'id': key})
-
-            if armed_modules_to_check:
-                for mod in armed_modules_to_check:
-                    state = mod['state']
-                    config = state['config']
-                    quantize_config = config.get("quantize_start")
-                    
-                    grid_to_use = None
-                    if isinstance(quantize_config, str):
-                        grid_to_use = quantize_config
-                    elif quantize_config is True:
-                        grid_to_use = "1/16" 
-
-                    if not grid_to_use:
-                        state['is_armed'] = False
-                        continue
-
-
-                    clock_alias_expr = config.get('device_in')
-                    if not clock_alias_expr: continue # No se puede cuantizar sin un device_in explícito
-                    
-                    clock_alias = get_evaluated_value_from_output_config(clock_alias_expr, None, state.get('eval_context',{}), "quantize_launch", "device_in")
-                    if not clock_alias: continue
-
-                    clock_port_name = None
-                    # Buscar por alias primero, que es más preciso
-                    for p_name, p_info in opened_ports_tracking.items():
-                        if p_info.get('alias_used') == clock_alias:
-                            clock_port_name = p_name
-                            break
-                    # Si no se encuentra por alias, buscar por subcadena como fallback
-                    if not clock_port_name:
-                         resolved_substring = global_device_aliases.get(clock_alias, clock_alias)
-                         for p_name in opened_ports_tracking.keys():
-                              if resolved_substring.lower() in p_name.lower():
-                                   clock_port_name = p_name
-                                   break
-                    
-                    if not clock_port_name:
-                        if monitor_active: print(f"Adv: No se pudo encontrar un puerto abierto para el reloj '{clock_alias}' del módulo {mod['id']}. No se puede lanzar cuantizado.")
-                        continue
-
-                    master_ticks = clock_tick_counters.get(clock_port_name, 0)
-                    ppqn = int(config.get('ppqn', 24))
-                    ticks_for_quantize = parse_step_duration(grid_to_use, ppqn)
-
-                    if ticks_for_quantize > 0 and master_ticks % ticks_for_quantize == 0:
-                        state['is_playing'] = True
-                        state['is_armed'] = False
-                        state['tick_counter'] = 0
-                        state['active_step'] = 0
-                        if monitor_active:
-                            id_str = f"{mod['type'].upper()}[{mod['id']}]"
-                            print(f"[*] {id_str} LAUNCHED (cuantizado a {grid_to_use})")
-
-
-
-
-
-
-# --- 3. PROCESAMIENTO DE SECUENCIADORES (LÓGICA FINAL) ---
-# midimod.py
-
-            for i, seq_state in enumerate(sequencers_state):
-                if not seq_state.get('is_playing', False):
-                    continue
-
-                if seq_state.get('schedule_needs_rebuild'):
-                    _rebuild_sequencer_schedule(i, seq_state)
-
-                current_tick = seq_state['tick_counter']
-                cycle_duration = seq_state.get('current_cycle_duration', 0)
-
-                # Si el ciclo ha terminado, reiniciamos contadores y reconstruimos la agenda para el siguiente.
-                if cycle_duration > 0 and current_tick >= cycle_duration:
-                    seq_state['tick_counter'] -= cycle_duration
-                    current_tick = seq_state['tick_counter']
-                    seq_state['last_known_tick'] -= cycle_duration
-                    
-                    adjusted_offs = []
-                    for fire_at, msg, port, alias in seq_state['pending_note_offs']:
-                        adjusted_offs.append((fire_at - cycle_duration, msg, port, alias))
-                    seq_state['pending_note_offs'] = adjusted_offs
-                    
-                    # Reconstruimos la agenda inmediatamente para el nuevo ciclo
-                    _rebuild_sequencer_schedule(i, seq_state)
-
-                # Procesar Note Offs pendientes
-                due_note_offs = [item for item in seq_state['pending_note_offs'] if current_tick >= item[0]]
-                if due_note_offs:
-                    seq_state['pending_note_offs'] = [item for item in seq_state['pending_note_offs'] if item not in due_note_offs]
-                    for _, msg, port, alias in due_note_offs:
-                        try:
-                            port.send(msg)
-                            if monitor_active:
-                                log_prefix = f"  \u21E2 SQ[{i}] off:"
-                                log_line = format_midi_message_for_log(msg, log_prefix, current_active_version, None, alias)
-                                if log_line: print(log_line)
-                        except Exception as e:
-                            print(f"Err sending scheduled note_off: {e}")
-
-                # Disparar eventos de la agenda
-                schedule = seq_state.get('event_schedule', [])
-                for event_to_fire in schedule:
-                    if event_to_fire['fire_at'] <= current_tick and event_to_fire['fire_at'] > seq_state['last_known_tick']:
-                        seq_state['active_step'] = event_to_fire['step']
-                        process_sequencer_step(i, seq_state, event_to_fire['fire_at'], opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name)
-                        seq_state['last_known_tick'] = event_to_fire['fire_at']
-
-
-
-
-
-
-            # --- 4. PROCESAMIENTO DE ARPEGIADORES (CORREGIDO) ---
-            arp_instances_to_remove = []
-            for instance_key, instance_state in list(arpeggiator_instances.items()):
-                # verbose_print(f"DBG:   - Proc. {instance_key}: playing={instance_state['is_playing']}, ticks={instance_state['tick_counter']}, pattern_len={len(instance_state['arp_pattern'])}")
-                arp_conf = instance_state['config']
-                
-                due_note_offs = [item for item in instance_state['pending_note_offs'] if instance_state['tick_counter'] >= item[0]]
-                for item in due_note_offs:
-                    _, msg, port, alias = item
-                    try: port.send(msg)
-                    except Exception: pass
-                    if item in instance_state['pending_note_offs']:
-                        instance_state['pending_note_offs'].remove(item)
-
-                if instance_state['is_playing']:
-                    # El tick_counter ya fue incrementado por el mensaje de reloj
-                    ppqn = int(arp_conf.get('ppqn', ARP_DEFAULTS['ppqn']))
-                    step_duration = arp_conf.get('step_duration', ARP_DEFAULTS['step_duration'])
-                    ticks_for_step = parse_step_duration(step_duration, ppqn)
-
-                    # verbose_print(f"DBG: Procesando {instance_key}. Ticks: {instance_state['tick_counter']}, Ticks para paso: {ticks_for_step}")
-
-
-                    if ticks_for_step > 0 and instance_state['tick_counter'] >= ticks_for_step:
-                        pattern = instance_state.get('arp_pattern', [])
-                        if pattern:
-                           current_tick_snapshot = instance_state['tick_counter']
-                           process_arpeggiator_step(instance_key, instance_state, opened_ports_tracking, virtual_port_mode_active, virtual_output_port_object_ref, virtual_output_name, current_tick_snapshot)
-                           instance_state['tick_counter'] -= ticks_for_step
-
-                           
-                           current_step = instance_state.get('active_step', 0)
-                           pattern_len = len(pattern)
-                           
-                           # La lógica compleja se ha ido. Solo avanzamos al siguiente paso.
-                           next_step = (current_step + 1) % pattern_len
-                           
-                           instance_state['active_step'] = next_step if pattern_len > 0 else 0
-
-                
-                # Limpieza de instancias detenidas y sin notas pendientes
-                elif not instance_state['is_playing'] and not instance_state['input_notes'] and not instance_state['pending_note_offs']:
-                    arp_instances_to_remove.append(instance_key)
-
-            for key in arp_instances_to_remove:
-                if key in arpeggiator_instances:
-                    del arpeggiator_instances[key]
-                    if monitor_active: print(f"     ⇢ ARP: Instancia {key} eliminada.")
-
-
-            # --- 4. PAUSA ---
-            if not midi_event_processed_this_loop and not kb_char_processed_this_loop and not osc_processed_this_loop:
-                time.sleep(0.001)
 
     except KeyboardInterrupt:
-        if not shutdown_flag: shutdown_flag=True
+        if not shutdown_flag: shutdown_flag = True
         print("\nInterrupción por teclado recibida en el bucle principal.")
     except Exception as e_main_loop:
         if not shutdown_flag:
@@ -3231,15 +3723,10 @@ MIDImod {script_version} - Command Line & Interactive Controls
         if osc_server_thread:
             osc_server_thread.join()
             print("  - Servidor OSC detenido.")
-        # --- INICIO: Detener el Watchdog ---
         if observer:
             observer.stop()
             observer.join()
             print("  Observador de ficheros detenido.")
-
-
-
-
 
         for port_name_final, port_data_final in opened_ports_tracking.items():
             port_obj_final = port_data_final.get("obj")
@@ -3250,7 +3737,6 @@ MIDImod {script_version} - Command Line & Interactive Controls
                 except Exception as e_close: 
                     print(f"  Error cerrando puerto '{port_name_final}': {e_close}")
         
-        # Restaurar termios si se modificó (solo en Linux/macOS)
         if 'termios' in sys.modules and sys.stdin.isatty() and _original_termios_settings:
             try: 
                 termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _original_termios_settings)
@@ -3258,6 +3744,7 @@ MIDImod {script_version} - Command Line & Interactive Controls
             except Exception as e_termios:
                 print(f"  Error restaurando termios: {e_termios}")
         print("  MIDImod detenido.")
+
 
 if __name__ == "__main__":
     # Asegurar que el directorio de reglas existe al inicio

@@ -113,7 +113,7 @@ python midimod.py [rule_file_name_1] [rule_file_name_2] [...] [options]
   
   - --vp-in YOUR_INPUT_NAME, --vp-out YOUR_OUTPUT_NAME: Lets you specify custom names for the virtual MIDI ports.
   
-  - --no-log: Starts MIDImod without showing the real-time MIDI message monitor in the console.
+  - --no-log: Starts with the real-time log monitor instead of the Terminal UI (TUI).
   
   - --help: Displays detailed help information and all available options.
 
@@ -127,6 +127,19 @@ python midimod.py [rule_file_name_1] [rule_file_name_2] [...] [options]
 
 - **Listing your available MIDI ports:**  
   python midimod.py --list-ports
+
+## OSC (Open Sound Control) Integration
+
+MIDImod can send and receive OSC messages, allowing it to communicate with a wide range of creative software like TouchDesigner, VCV Rack, or Max/MSP.
+
+### Receiving OSC
+Define an `osc_filter` to trigger MIDI actions from incoming OSC messages. For example, an OSC message to `/play/kick` can trigger a MIDI note.
+
+### Sending OSC
+Use the `send_osc` action inside any `output` block to send an OSC message when a MIDI event occurs.
+
+This allows you to control visuals, synth parameters in other apps, or custom performance tools directly from your MIDI controllers.
+
 
 ## Live Mode for Performance and Improvisation
 
@@ -150,10 +163,22 @@ This allows for powerful, on-the-fly arrangement and sound design:
     ```
 4.  Open your rule files in a text editor and start performing. Every `Ctrl+S` becomes part of your musical expression.
 
+## Interactive Controls & Terminal UI (TUI)
+
+By default, MIDImod starts with a clean, full-screen **Terminal User Interface (TUI)** that provides an at-a-glance overview of your setup. It shows MIDI port activity, module status, and system information without flooding your screen.
+
+While the script is running, you can use these keys in both the TUI and the log monitor:
+
+-   **`m`**: Toggles between the **Terminal UI (TUI)** and the real-time log monitor.
+-   **`Spacebar`**: Cycles to the next available `version`.
+-   **`0-9`**: Jumps directly to a specific `version` number.
+-   **`Enter`**: Sends Start/Stop transport commands to the port aliased as `TPT_out`.
+-   **`Ctrl+C`**: Safely shuts down the script.
+
 
 ## Structure of Rule Files (.json)
 
-Your rule files are the heart of MIDImod. They must be in JSON format and live in a folder named rules/ located in the same directory as the midimod.py script. Sections for the json files are:
+Your rule files are the heart of MIDImod. They use the **JSON5 format**, which allows for helpful comments and live in a folder named rules/ located in the same directory as the midimod.py script. Sections for the json files are:
 
 
 1. **"device_alias" (Object, Optional but Highly Recommended):**

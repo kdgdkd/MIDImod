@@ -1,0 +1,23 @@
+{
+    "device_alias": {
+      "reloj_maestro": "CLOCK",
+      "sinte_bajo": "MIDImod_OUT",
+      "teclado_control": "MiTecladoMIDI"
+    },
+    
+
+  
+    "midi_filter": [
+      {
+        "_comment": "Filtro de Pánico Global - Escucha el CC#123",
+        "device_in": "teclado_control",
+        "event_in": "cc",
+        "value_1_in": 123,
+        "output": [
+          {
+            "action": "panic"
+          }
+        ]
+      }
+    ]
+  }
