@@ -1,0 +1,23 @@
+{
+    /// Example 16: Clock and CC from Different Sources to Same Destination.
+    /// Demonstrates how to combine MIDI Clock from one device and Control Change messages
+    /// from another device, routing both to the same MIDI output.
+    
+    "midi_filter": [
+      {
+        /// Filter 1: Handles MIDI Clock from the Keystep.
+        /// This filter ensures that only MIDI clock messages from 'Keystep' are processed
+        "device_in": "Keystep",
+        "event_in": "clock",
+        "device_out": "Synth OUT (e.g., 'DAW Synth')",
+      },
+      {
+        /// Filter 2: Routes Control Change messages from the UC-33.
+        /// All CC messages from 'UC-33' are forwarded to the 'Synth OUT'.
+        /// Channel, CC number, and value are all passed through as-is.
+        "device_in": "UC-33",
+        "event_in": "cc",
+        "device_out": "Synth OUT (e.g., 'DAW Synth')"
+      }
+    ]
+  }

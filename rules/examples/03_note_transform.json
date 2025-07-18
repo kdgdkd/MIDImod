@@ -1,0 +1,25 @@
+{
+    /// Example 3: Note Transformation - Transposition and Chord Generation.
+    /// Takes an incoming note, from any channel, and transposes it up by 12 semitones (one octave) on channel 1,
+    /// and also plays a major triad chord rooted at the incoming note on channel 5.
+    "midi_filter": [
+      {
+        "device_in": "KeyStep",
+        "event_in": "note",
+        "output": [
+          {
+            "device_out": "Synth OUT",
+            "channel_out": 1,
+            /// The 'value_1_out' is set to the incoming note value plus 12, transposing it up by one octave.
+            "value_1_out": "value_1_in + 12"
+          },
+          {
+            "device_out": "Synth OUT",
+            "channel_out": 5,
+            /// The 'chord' function generates a list of notes to form a major triad, where the root note is the incoming note (value_1_in).
+            "value_1_out": "chord(value_1_in, 'major_triad')"
+          }
+        ]
+      }
+    ]
+  }

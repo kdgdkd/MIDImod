@@ -1,0 +1,26 @@
+{
+    /// Example 13: CC to Note Mapping.
+    /// Each incoming Control Change message (CC 0-7) triggers a specific MIDI note.
+    /// The CC value determines the velocity of the output note.
+    "midi_filter": [
+      {
+        /// This filter processes any Control Change message from CC 0 to CC 7.
+        /// It converts incoming CC events into a Note On messages.
+        "device_in": "My MIDI Controller (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": [0, 1, 2, 3, 4, 5, 6, 7], /// Filters for incoming CC numbers 0 through 7.
+        "output": [
+          {
+            "device_out": "MIDI Synth (e.g., 'DAW Synth')",
+            /// Converts the CC event into a Note On.
+            "event_out": "note_on",
+            /// Maps the incoming CC number (0-7) to a unique MIDI note number.
+            /// Adding 48 means CC 0 triggers note 48 (C3), CC 1 triggers 49 (C#3), etc.
+            "value_1_out": "value_1_in + 48",
+            /// Fixed velocity at 100.
+            "value_2_out": 100
+          }
+        ]
+      }
+    ]
+  }

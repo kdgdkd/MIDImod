@@ -1,0 +1,52 @@
+{
+    /// Example 10: OSC Control - Sending MIDI or Changing User Variables via OSC (Corrected).
+    /// Demonstrates how to configure MIDIMod to listen for OSC messages
+    /// and trigger actions based on the OSC address and arguments.
+    
+    "osc_configuration": {
+      "receive": {
+        "ip": "127.0.0.1",
+        "port": 9000
+      }
+    },
+  
+    "user_variables": {
+      "current_preset": 0, /// A user variable to track the active preset.
+      "effect_on": 0       /// CORRECTED: Initial state for effect_on, defined at top-level.
+    },
+  
+    "osc_filter": [
+      {
+        /// OSC Filter 1: Changes preset via MIDI Program Change.
+        /// Listens for OSC messages at '/preset' with one argument (the preset number).
+        "address": "/preset",
+        "output": [
+          {
+            /// Sends a Program Change message.
+            /// The first OSC argument (args[0]) is used as the Program Change number.
+            "event_out": "pc",
+            "channel_out": 0,
+            "value_1_out": "args[0]",
+            "device_out": "Synth (e.g., 'DAW Synth')"
+          },
+          {
+            /// Updates the 'current_preset' user variable with the OSC argument.
+            /// No 'device_out' makes this an internal action.
+            "current_preset": "args[0]"
+          }
+        ]
+      },
+      {
+        /// OSC Filter 2: Toggles a global effect variable.
+        /// Listens for OSC messages at '/effect/toggle'.
+        /// Uses the 'toggle' function to flip a boolean-like user variable.
+        "address": "/effect/toggle",
+        "output": [
+          {
+            /// Toggles the 'effect_on' variable between 0 and 1.
+            "effect_on": "toggle(effect_on)"
+          }
+        ]
+      }
+    ]
+  }

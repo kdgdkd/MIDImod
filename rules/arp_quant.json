@@ -1,0 +1,22 @@
+{
+    "device_alias": {
+        "TECLADO": "X-TOUCH",
+        "SINT_A": "TPT",
+        "RELOJ": "CLOCK"
+    },
+    "input_filter": [
+        {
+            "_comment": "Tocar notas en canal 1 arma un arpegiador que se lanzará en el siguiente 1/4 de nota.",
+            "device_in": "TECLADO",
+            "ch_in": 1,
+            "event_in": "note",
+            "output": [{
+                "arp_id": 1,
+                "device_in": "RELOJ",
+                "device_out": "SINT_A",
+                "quantize_start": "1/4",
+                "step_duration": "1/16"
+            }]
+        }
+    ]
+}

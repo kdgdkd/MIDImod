@@ -1,0 +1,54 @@
+{
+  "device_alias": {
+    "MyController": "X-TOUCH", // Change "Oxygen Pro" to a part of your controller's name
+    "MySynth": "MIDImod_OUT"          // Change "UM-ONE" to a part of your synth's output port name
+  },
+
+  "midi_filter": [
+    {
+      "_comment": "Controls a SysEx parameter using CC #0",
+      
+      "device_in": "MyController",
+      "event_in": "cc",
+      "value_1_in": 0, // Triggers on CC #0
+
+      "output": [
+        {
+          "device_out": "MySynth",
+          
+          "_comment_sysex": "This is a generic example. YOU MUST replace these bytes with data from your synthesizer.",
+          "sysex_data": [
+            // --- SysEx Message Start (F0) ---
+            // Mido adds F0 and F7 automatically, so we don't include them here.
+            
+            // --- Manufacturer and Device Header ---
+            // Example for a generic Roland device. Check your synth's manual.
+            0x41, // Manufacturer ID (0x41 = Roland)
+            0x10, // Device ID (e.g., 16)
+            0x00, // Model ID (e.g., 0)
+            0x00, // Model ID
+            0x6A, // Model ID (e.g., 106)
+            0x12, // Command (e.g., DT1 - Data Set)
+            
+            // --- Parameter Address to Modify ---
+            // These 4 bytes are entirely dependent on the specific parameter.
+            // Check your synth's "Implementation Chart" or "Parameter Address Map".
+            0x08, // Address (Byte 1)
+            0x00, // Address (Byte 2)
+            0x01, // Address (Byte 3)
+            0x05, // Address (Byte 4)
+            
+            // --- The Dynamic Value ---
+            // This is where we insert the value of the incoming CC #74.
+            "value_2", // This variable holds the CC value (0-127)
+            
+            0x00 // Checksum (example, likely incorrect for your synth)
+
+            // --- SysEx Message End (F7) ---
+            // Mido adds this automatically.
+          ]
+        }
+      ]
+    }
+  ]
+}

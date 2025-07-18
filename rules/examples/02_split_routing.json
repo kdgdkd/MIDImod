@@ -1,0 +1,28 @@
+{
+    /// Example 2: Split Routing by Event Type.
+    /// Routes Note messages to one destination/channel and Control Change messages to another.
+    "midi_filter": [
+      {
+        /// Filter 1: Forwards Note On/Off messages from any channel in 'InputDevice' to the same channel in 'Synth Output'.
+        /// Changes the channel to 4 (MIDI Channel 5). Event type and values are inherited.
+        "device_in": "KeyStep",
+        "event_in": "note",
+        "device_out": "Synth OUT",
+        "output": [
+          {} /// An empty output block explicitly passes through all inherited parameters.
+        ]
+      },
+      {
+        /// Filter 2: Forwards Control Change messages from any channel in 'InputDevice' to channel 10 in 'Drum Machine'.
+        /// All parameters (channel, CC number, value) are inherited.
+        "device_in": "KeyStep",
+        "event_in": "cc",
+        "device_out": "Drum Machine",
+        "output": [
+          {
+            "channel_out": 10
+          } 
+        ]
+      }
+    ]
+  }

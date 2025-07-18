@@ -1,0 +1,97 @@
+{
+    /// Example 14: CC Rise Sequencer with Control via seq_active and seq_mute.
+    /// This sequencer generates a rising sequence of CC values over 4 measures (bars).
+    /// This version controls sequencer playback state using 'seq_active' and 'seq_mute'
+    /// properties.
+    /// IMPORTANT: 'seq_active' controls if sequencer steps are PROCESSED based on incoming MIDI clock.
+    /// It does NOT reset the sequencer's internal clock or tick counter.
+    
+    "sequencer": [
+      {
+        /// Sequencer 1: CC Rise Effect.
+        /// Generates 96 steps, where the value for CC 74 increases progressively.
+        "seq_id": 1,
+        "device_in": "Master Clock (e.g., 'Ableton Live 1 Midi')", /// Syncs to external MIDI clock.
+        "device_out": "Synth Filter (e.g., 'DAW Synth')", /// Device to receive the CC.
+        "ppqn": 24,           /// Standard PPQN for MIDI clock.
+        "step_total": 96,     /// 96 steps = 4 measures (bars) * 24 PPQN (1/4 notes).
+        "step_duration": "1/24", /// Each step is one tick (1/24th of a quarter note), making it smooth.
+        
+        /// Using a Python expression to generate values from 0 to 127 over 96 steps.
+        /// 'step' is a context variable representing the current step index (0 to 95).
+        "seq_cc_value": "int(step / 95 * 127)", /// Value ramps up from 0 to 127.
+        "seq_cc_number": 74, /// Target CC number for filter cutoff.
+        "seq_active": 0,     /// IMPORTANT: Start INACTIVE. Will only process steps when explicitly set to 1.
+                             /// For the sequencer to start 'playing' (advancing its tick counter),
+                             /// it still needs a 'start' MIDI message on 'device_in'.
+        "seq_mute": 0,       /// Not muted initially.
+        "seq_gate": 1        /// Ensure steps are always active.
+      }
+    ],
+  
+    "midi_filter": [
+      {
+        /// Filter 1: Activates Sequencer 1 (allows it to process steps).
+        /// When a specific Note ON (e.g., C0, note 12) is received, sets 'seq_active' to 1.
+        /// The sequencer still needs to receive a MIDI clock to advance its internal position.
+        "device_in": "ControlSurface (e.g., 'LPX MIDI 2')",
+        "event_in": "note_on",
+        "value_1_in": 12, /// Example trigger note (C0)
+        "output": [
+          {
+            "action": "set_var",
+            "set_var": [
+              {
+                "name": "seq_active",
+                "index": 0, /// 'seq_active' is a global property for the sequencer, so index 0 is used.
+                "value": 1, /// Set to active.
+                "sequencer_index": 0 /// Targets Sequencer at index 0.
+              }
+            ]
+          }
+        ]
+      },
+      {
+        /// Filter 2: Deactivates Sequencer 1 (prevents it from processing steps).
+        /// When a specific Note OFF (e.g., C0, note 12) is received, sets 'seq_active' to 0.
+        /// The sequencer's internal clock/position will continue to advance if MIDI clock is present.
+        "device_in": "ControlSurface (e.g., 'LPX MIDI 2')",
+        "event_in": "note_off",
+        "value_1_in": 12, /// Example trigger note (C0)
+        "output": [
+          {
+            "action": "set_var",
+            "set_var": [
+              {
+                "name": "seq_active",
+                "index": 0,
+                "value": 0, /// Set to inactive.
+                "sequencer_index": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        /// Filter 3: Toggles Sequencer 1's mute state.
+        /// Toggles the 'seq_mute' property of Sequencer 1 using an incoming CC (e.g., CC 21).
+        /// This allows silencing the sequencer's MIDI output without affecting its processing or internal clock.
+        "device_in": "ControlSurface (e.g., 'LPX MIDI 2')",
+        "event_in": "cc",
+        "value_1_in": 21, /// Example trigger CC (e.g., a button)
+        "output": [
+          {
+            "action": "set_var",
+            "set_var": [
+              {
+                "name": "seq_mute",
+                "index": 0,
+                "value": "toggle(get_var('seq_mute', 0, 0))",
+                "sequencer_index": 0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }

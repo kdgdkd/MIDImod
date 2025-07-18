@@ -1,0 +1,97 @@
+{
+    // 1. CONFIGURACIÓN: Edita estos alias para tus dispositivos.
+    "device_alias": {
+      "reloj_maestro": "CLOCK",
+      "sinte_bajo_agresivo": "MIDImod_OUT"
+    },
+  
+    // 2. ESTADO GLOBAL: Una única variable para controlar el índice del secuenciador activo.
+    "user_variables": {
+      "active_seq_index": 0 // 0=Intro, 1=Groove A, etc.
+    },
+  
+    // 3. FILTROS OSC: Asignan el índice correcto a la variable de estado.
+    "osc_filter": [
+      { "address": "/miditema/part/change", "if": "args[3] == 0", "output": [{ "active_seq_index": 0 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 1", "output": [{ "active_seq_index": 1 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 2", "output": [{ "active_seq_index": 2 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 3", "output": [{ "active_seq_index": 3 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 4", "output": [{ "active_seq_index": 4 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 5", "output": [{ "active_seq_index": 5 }] },
+      { "address": "/miditema/part/change", "if": "args[3] == 6", "output": [{ "active_seq_index": 6 }] }
+    ],
+  
+    // 4. SECUENCIADORES: Uno para cada parte de la canción.
+    "sequencer": [
+      // --- Secuenciador 0: Intro Beat ---
+      {
+        "_comment": "Intro Beat",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 0 else 0", // Se activa si active_seq_index es 0
+        "seq_note": [41,null,41,null, 41,null,41,41, 41,null,41,null, 41,null,null,null],
+        "seq_gate": [1,0,1,0, 1,0,1,1, 1,0,1,0, 1,0,0,0],
+        "output": [{}] // Usa la lógica por defecto del secuenciador
+      },
+      // --- Secuenciador 1: Groove A ---
+      {
+        "_comment": "Groove A",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 1 else 0", // Se activa si active_seq_index es 1
+        "seq_note": [41,41,null,41, 46,41,null,41, 48,48,null,48, 46,41,null,null],
+        "seq_gate": [1,1,0,1, 1,1,0,1, 1,1,0,1, 1,1,0,0],
+        "output": [{}]
+      },
+      // --- Secuenciador 2: Groove A+B ---
+      {
+        "_comment": "Groove A+B",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 2 else 0",
+        "seq_note": [41,53,46,41, 48,53,44,41, 49,49,49,49, 51,48,46,41],
+        "seq_gate": [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+        "output": [{}]
+      },
+      // --- Secuenciador 3: Filter Break ---
+      {
+        "_comment": "Filter Break",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 3 else 0",
+        "seq_note": [29,null,null,null, null,null,null,null, 29,null,null,null, null,null,null,null],
+        "seq_gate": [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+        "output": [{}]
+      },
+      // --- Secuenciador 4: Groove B (Peak) ---
+      {
+        "_comment": "Groove B (Peak)",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 4 else 0",
+        "seq_note": [41,53,41,51, 41,49,41,48, 41,46,41,48, 41,49,41,51],
+        "seq_gate": [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+        "output": [{}]
+      },
+      // --- Secuenciador 5: Cooldown ---
+      {
+        "_comment": "Cooldown",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 5 else 0",
+        "seq_note": [41,null,null,null, 46,null,null,null, 48,null,null,null, 46,null,41,null],
+        "seq_gate": [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,1,0],
+        "output": [{}]
+      },
+      // --- Secuenciador 6: Outro Beat ---
+      {
+        "_comment": "Outro Beat",
+        "clock_in": "reloj_maestro", "device_out": "sinte_bajo_agresivo", "channel_out": 10,
+        "step_total": 16, "step_duration": "1/16", "seq_velocity": 120, "seq_note_length": 0.85,
+        "seq_active": "1 if active_seq_index == 6 else 0",
+        "seq_note": [41,null,41,null, 41,null,41,41, 41,null,41,null, 41,null,null,null],
+        "seq_gate": [1,0,1,0, 1,0,1,1, 1,0,1,0, 1,0,0,0],
+        "output": [{}]
+      }
+    ]
+  }

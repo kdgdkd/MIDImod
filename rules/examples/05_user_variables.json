@@ -1,0 +1,43 @@
+{
+    /// Example 5: User Variables (Corrected again).
+    /// Defines and uses global user variables to store values (e.g., for transposition and scale).
+    "user_variables": {
+      "transpose_amount": 0, /// Initial transposition amount
+      "scale_lock": "major",  /// Initial scale for note scaling (e.g., 'major', 'pentatonic_minor')
+      "root_note_for_scale": 60 /// Root note for scale operations (Middle C)
+    },
+    
+    "midi_filter": [
+      {
+        /// Filter 1: Sets the 'transpose_amount' user variable directly based on incoming CC 20 value.
+        "device_in": "Controller (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": 20, /// Filters for CC 20
+        "output": [
+          {
+            "transpose_amount": "value_2_in" /// CC20 sets the transpose amount directly.
+          }
+        ]
+      },
+      {
+        /// Filter 2: Applies the 'transpose_amount' user variable to all incoming notes.
+        /// Also, scales the notes to the 'scale_lock' defined in user_variables.
+        "device_in": "KeyStep",
+        "event_in": "note",
+        "device_out": "Synth Module (e.g., 'DAW Synth')",
+        "output": [
+          {
+            /// Applies transposition using 'transpose_amount'.
+            /// Then, scales the resulting note to the 'scale_lock' (e.g., 'major') with 'root_note_for_scale' (e.g., 60).
+            "value_1_out": {
+              "scale_notes": {
+                "scale_value": "value_1_in + transpose_amount",
+                "scale_root": "root_note_for_scale", 
+                "scale_type": "scale_lock" 
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }

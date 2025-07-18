@@ -1,0 +1,61 @@
+{
+    "device_alias": { "TECLADO": "X-TOUCH", "SINT": "TPT", "RELOJ": "CLOCK" },
+
+    "arpeggiator": [{
+        "_comment": "Plantilla base para el Arpegiador 1. Los detalles se sobrescriben por versión.",
+        "arp_id": 1,
+        "device_in": "RELOJ",
+        "device_out": "SINT",
+        "step_duration": "1/16"
+    }],
+
+    "input_filter": [
+        {
+            "_comment": "Alimenta notas al Arpegiador 1. Se aplica a todas las versiones.",
+            "device_in": "TECLADO",
+            "ch_in": 1,
+            "event_in": "note",
+            "output": [{ "arp_id": 1 }]
+        },
+        {
+            "_comment": "CONFIGURACIÓN PARA VERSIÓN 0: Arpegio ascendente simple.",
+            "version": 0,
+            "device_in": null,
+            "output": [{
+                "arp_id": 1,
+                "arp_mode": "sorted",
+                "arp_step_direction": "up"
+            }]
+        },
+        {
+            "_comment": "CONFIGURACIÓN PARA VERSIÓN 1: Modo de usuario (Raíz, 3ra, 2da, 3ra).",
+            "version": 1,
+            "device_in": null,
+            "output": [{
+                "arp_id": 1,
+                "arp_mode": [0, 2, 1, 2],
+                "arp_step_direction": "up"
+            }]
+        },
+        {
+            "_comment": "CONFIGURACIÓN PARA VERSIÓN 2: Dirección de usuario (avanza 2, retrocede 1).",
+            "version": 2,
+            "device_in": null,
+            "output": [{
+                "arp_id": 1,
+                "arp_mode": "sorted",
+                "arp_step_direction": [2, -1]
+            }]
+        },
+        {
+            "_comment": "CONFIGURACIÓN PARA VERSIÓN 3: Modo aleatorio con dirección custom.",
+            "version": 3,
+            "device_in": null,
+            "output": [{
+                "arp_id": 1,
+                "arp_mode": "random1",
+                "arp_step_direction": [1, 1, -2]
+            }]
+        }
+    ]
+}

@@ -1,0 +1,68 @@
+{
+    /// Example 6: CC-Controlled Notes (Velocity and Randomness).
+    /// Uses the value of one CC to determine output note velocity,
+    /// and another CC to add randomness to output notes on a different channel.
+    "user_variables": {
+      "midi_vel_control": 100, /// Default velocity controlled by CC 10
+      "random_range_control": 0 /// Default random range controlled by CC 11
+    },
+  
+    "midi_filter": [
+      {
+        /// Filter 1: Updates 'midi_vel_control' user variable based on incoming CC 10.
+        "device_in": "Controller (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": 10,
+        "output": [
+          {
+            "midi_vel_control": "value_2_in"
+          }
+        ]
+      },
+      {
+        /// Filter 2: Updates 'random_range_control' user variable based on incoming CC 11.
+        /// Scales input (0-127) to a suitable random range (0-20).
+        "device_in": "Controller (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": 11,
+        "output": [
+          {
+            "random_range_control": {
+              "scale_value": "value_2_in",
+              "range_in": [0, 127],
+              "range_out": [0, 20]
+            }
+          }
+        ]
+      },
+      {
+        /// Filter 3: Applies the user-controlled velocity and randomness to incoming notes.
+        /// Notes on input channel 0 use 'midi_vel_control'.
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "note",
+        "channel_in": 0,
+        "device_out": "Synth Module (e.g., 'DAW Synth')",
+        "output": [
+          {
+            /// Uses the 'midi_vel_control' user variable for the output velocity.
+            "value_2_out": "midi_vel_control" 
+          }
+        ]
+      },
+      {
+        /// Filter 4: Notes on input channel 1 get random offset.
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "note",
+        "channel_in": 1,
+        "device_out": "Another Synth (e.g., 'Hardware Synth')",
+        "output": [
+          {
+            "channel_out": 1,
+            /// Adds a random offset to the note velocity, controlled by 'random_range_control'.
+            /// The random() function gets 'random_range_control' and applies a range of -X to +X.
+            "value_2_out": "random(value_2_in - random_range_control, value_2_in + random_range_control)"
+          }
+        ]
+      }
+    ]
+  }

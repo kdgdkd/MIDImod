@@ -1,0 +1,46 @@
+{
+  "device_alias": {
+    "reloj_maestro": "CLOCK",
+    "sinte_bajo": "MIDImod_OUT"
+  },
+  "user_variables": {
+    "active_seq_index": 0
+  },
+  "sequencer": [
+    {
+      "seq_id": "b1_test",
+      "_comment": "Test de longitud dinámica y polirritmia. La secuencia debe durar 7 pasos.",
+      "clock_in": "reloj_maestro",
+      "device_out": "sinte_bajo",
+      "channel_out": 1,
+      "step_duration": "1/8",
+      "step_total": 8,
+      "seq_active": 1,
+      "seq_root_note": 48,
+
+      "_comment_arrays": "Cada array tiene una longitud diferente para probar la repetición cíclica.",
+      
+      "seq_transpose": [
+        0, 3, 7, 12, 8, 8,
+      ],
+
+      "seq_gate": [
+        1, 1, 1, 1
+      ],
+
+      "seq_velocity": [
+        120, 90, 60
+      ],
+
+      "seq_note_length": [
+        0.5, 1.5
+      ],
+
+      "output": [
+        {
+          "value_1_out": "root_note_out + transpose_out"
+        }
+      ]
+    }
+  ]
+}

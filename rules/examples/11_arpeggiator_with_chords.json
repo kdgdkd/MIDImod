@@ -1,0 +1,63 @@
+{
+    /// Example 11: Arpeggiator Combined with Chords.
+    /// A single incoming note triggers an arpeggiator, which then plays a chord's notes in sequence.
+    /// This simulates feeding a chord into an arpeggiator from a single key press.
+    
+    "arpeggiator": [
+      {
+        /// Arpeggiator Template 1: Basic Up Arpeggio.
+        /// Defines a reusable template for an arpeggiator instance.
+        "arp_id": 1,              /// Unique ID for this arpeggiator template.
+        "ppqn": 24,               /// Pulses Per Quarter Note for internal clock.
+        "step_duration": "1/16",  /// Each arpeggio step is a 16th note.
+        "arp_mode": "up",         /// Arpeggiates notes in ascending order.
+        "arp_octaves": 1,         /// Plays over 1 octave.
+        "arp_note_length": 0.8,   /// Notes are 80% of step duration (for gate).
+        "device_out": "Synth Module (e.g., 'DAW Synth')", /// Default output device.
+        "channel_out": 0          /// Default output channel (MIDI Channel 1).
+      }
+    ],
+  
+    "midi_filter": [
+      {
+        /// Filter 1: Triggers Arpeggiator 1 with a major triad chord when a Note On is pressed.
+        /// The 'arp_id' in the output block creates or updates an arpeggiator instance.
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "note_on",
+        "output": [
+          {
+            "arp_id": 1, /// Refers to the arpeggiator template with this ID.
+            /// 'value_1_out' here provides the list of input notes for the arpeggiator.
+            /// 'chord(value_1_in, 'major_triad')' generates a 3-note major chord from the incoming note.
+            "value_1_out": "chord(value_1_in, 'major_triad')"
+            /// value_2_out (velocity) and channel_out (arpeggiator channel) are inherited from input by default.
+          }
+        ]
+      },
+      {
+        /// Filter 2: Stops the arpeggiator instance when a Note Off is received for that note.
+        /// This is crucial for managing active notes within the arpeggiator.
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "note_off",
+        "output": [
+          {
+            "arp_id": 1,
+            "value_1_out": "value_1_in", /// Pass the note that was released.
+            "value_2_out": 0             /// Velocity 0 signifies a note off to the arpeggiator logic.
+          }
+        ]
+      },
+      {
+        /// Filter 3: A simple panic action to stop and silence all arpeggiator instances.
+        /// Triggered by a specific Control Change (e.g., CC 120 for All Sound Off).
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "cc",
+        "value_1_in": 120, /// Example: CC 120
+        "output": [
+          {
+            "action": "panic" /// Global panic action.
+          }
+        ]
+      }
+    ]
+  }

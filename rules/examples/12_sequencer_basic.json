@@ -1,0 +1,54 @@
+{
+    /// Example 12: Basic Sequencer Usage.
+    /// Defines a simple 4-step note sequencer and shows how to trigger it.
+    
+    "sequencer": [
+      {
+        /// Sequencer 1: Simple 4-step melodic sequencer.
+        /// Plays a predefined pattern of notes, velocities, and gate values.
+        "seq_id": 1,              /// Unique ID (optional, but good for tracking).
+        "device_in": "Master Clock (e.g., 'Ableton Live 1 Midi')", /// Input port for MIDI clock sync.
+        "device_out": "Lead Synth (e.g., 'Blofeld Synth')", /// Output device for sequencer notes.
+        "ppqn": 24,               /// Pulses Per Quarter Note (standard MIDI clock default).
+        "step_total": 4,          /// Number of steps in the sequence.
+        "step_duration": "1/8",   /// Each step's duration (e.g., 1/8th note).
+        "seq_transpose": 0,       /// Global transposition for the entire sequence.
+  
+        /// Define arrays for each step's properties.
+        /// These arrays will loop if they are shorter than 'step_total'.
+        "seq_note": [60, 62, 64, 67],         /// Notes for each step (C4, D4, E4, G4).
+        "seq_velocity": [100, 90, 110, 80],   /// Velocity for each step.
+        "seq_gate": [1, 1, 1, 1],             /// 1 = note plays, 0 = step is skipped (rest).
+        "seq_note_length": [0.9, 0.9, 0.9, 0.9] /// Note duration as a factor of 'step_duration'.
+      }
+    ],
+  
+    "midi_filter": [
+      {
+        /// Filter 1: Starts Sequencer 1 when a specific Note On (e.g., C-1, note 0) is received.
+        /// This provides a manual trigger for the sequencer.
+        "device_in": "ControlSurface (e.g., 'LPX MIDI 2')",
+        "event_in": "note_on",
+        "value_1_in": 0, /// Note 0 (C-1)
+        "output": [
+          {
+            "action": "start_module", /// Action to start a sequencer or arpeggiator.
+            "target_seq_index": 0     /// Refers to the sequencer at index 0 in the 'sequencer' array.
+          }
+        ]
+      },
+      {
+        /// Filter 2: Stops and silences Sequencer 1 when a specific Note Off (e.g., C-1, note 0) is received.
+        /// Provides a manual stop mechanism.
+        "device_in": "ControlSurface (e.g., 'LPX MIDI 2')",
+        "event_in": "note_off",
+        "value_1_in": 0, /// Note 0 (C-1)
+        "output": [
+          {
+            "action": "silence",      /// Action to stop and silence a module.
+            "target_seq_index": 0     /// Refers to the sequencer at index 0.
+          }
+        ]
+      }
+    ]
+  }

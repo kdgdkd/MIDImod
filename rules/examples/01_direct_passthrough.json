@@ -1,0 +1,12 @@
+{
+    /// Example 1: Direct Passthrough.
+    /// Forwards all MIDI messages from 'MIDI Input Device' to 'MIDI Output Device' as-is.
+    /// No 'output' block is needed as all parameters (event, channel, values) are inherited by default.
+    /// device can be defined with substrings of the actual device names, non-case sensitive.
+    "midi_filter": [
+      {
+        "device_in": "KeyStep",
+        "device_out": "USB MIDI"
+      }
+    ]
+  }

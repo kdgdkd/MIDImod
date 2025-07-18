@@ -1,0 +1,24 @@
+{
+    /// Example 4: Control Change Range Scaling.
+    /// Maps an incoming CC value from one range to another.
+    "midi_filter": [
+      {
+        /// This filter takes CC 7 (Volume) from the input device.
+        /// It scales the incoming value (0-127) to a narrower output range (64-100).
+        /// The CC number and channel are inherited.
+        "device_in": "UC-33",
+        "event_in": "cc",
+        "value_1_in": 7, /// Filters for Control Change number 7
+        "output": [
+          {
+            "device_out": "Synth OUT",
+            "value_2_out": {
+              "scale_value": "value_2_in",
+              "range_in": [0, 127],
+              "range_out": [64, 100]
+            }
+          }
+        ]
+      }
+    ]
+  }

@@ -1,0 +1,21 @@
+{
+    /// Example 7: Note On to Program Change Conversion.
+    /// Converts an incoming Note On message into a Program Change message.
+    "midi_filter": [
+      {
+        /// When a Note On message (e.g., note 60) is received on channel 0,
+        /// it is converted into a Program Change message.
+        /// The note number (value_1_in) becomes the Program Change number.
+        "device_in": "MIDI Keyboard (e.g., 'MIDIIN2 (LPX)')",
+        "event_in": "note_on",
+        "channel_in": 0,
+        "device_out": "Effect Processor (e.g., 'Reverb Unit')",
+        "output": [
+          {
+            "event_out": "pc", /// Specifies the output event type as Program Change.
+            "value_1_out": "value_1_in" /// The incoming note number becomes the Program Change number. 
+          }
+        ]
+      }
+    ]
+  }

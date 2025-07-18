@@ -1,0 +1,198 @@
+{
+  "device_alias": {
+    "reloj_maestro": "CLOCK",
+    "sampler_out": "MIDImod_OUT",
+    "xtouch": "X-TOUCH" 
+  },
+  "user_variables": {
+    // Array para los mutes. 1=Muteado, 0=Activo. Un elemento por cada pista.
+    "track_mutes": [
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+    ],
+    // Array para los índices de los samples usados en cada instrumento. Un elemento por cada pista.
+    "sample_index": [
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+    ]
+  },
+
+  "midi_filter": [
+    {
+      "_comment": "Selección de sample por instrumento.",
+      "device_in": "xtouch",
+      "event_in": "cc",
+      "value_1_in": "0-7", // CC0 para pista 0 etc
+      "output": [
+        {
+          "set_var": [{
+            "name": "sample_index",
+            "index": "value_1_in",
+            "value": "value_2_in"
+          }]
+        }
+      ]
+    },
+    {
+      "_comment": "Filtro para los botones de Mute.",
+      "device_in": "xtouch",
+      "event_in": "note_on", // note on activa la pista (unmute)
+      "value_1_in": "0-7", // note 0 para pista 0 etc
+      "output": [
+        {
+          "set_var": [{
+            "name": "track_mutes",
+            "index": "value_1_in",
+            "value": "0"
+          }]
+        }
+      ]
+    },
+    {
+      "_comment": "Filtro para los botones de Mute.",
+      "device_in": "xtouch",
+      "event_in": "note_off", // note off desactiva la pista (mute)
+      "value_1_in": "0-7", // note 0 para pista 0 etc
+      "output": [
+        {
+          "set_var": [{
+            "name": "track_mutes",
+            "index": "value_1_in",
+            "value": "1"
+          }]
+        }
+      ]
+    }
+  ],
+
+  "sequencer": [
+    // --- PISTA 0: BD 0 ---
+    {
+      "seq_id": "BD 0",
+      "clock_in": "reloj_maestro",
+      "device_out": "sampler_out",
+      "channel_out": 0,
+      "step_total": 16,
+      "step_duration": "1/16",
+      "seq_note_length": -1, // No enviar note_off para samplers
+      "seq_note": "get_var('sample_index', 0)",         // Nota MIDI que dispara el BD
+      "seq_mute": "get_var('track_mutes', 0)", // Lee su estado de mute del array
+      "seq_gate": [ 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 ],
+      "seq_velocity": [ 110, 0, 0, 0, 100, 0, 0, 0, 110, 0, 0, 0, 90, 0, 0, 0 ],
+      "output": [{}] // Usa el comportamiento por defecto del secuenciador
+    },
+    // --- PISTA 1: SD 2 ---
+    {
+      "seq_id": "SD 2",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 1,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 1)",
+      "seq_mute": "get_var('track_mutes', 1)",
+      "seq_gate": [ 
+        0, 0, 0, 0, 
+        1, 0, 0, 0, 
+        0, 0, 0, 0, 
+        1, 0, 0, 0 
+    ],
+      "output": [{}]
+    },
+    // --- PISTA 2: CL 3 ---
+    {
+      "seq_id": "CL 3",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 2,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 2)",
+      "seq_mute": "get_var('track_mutes', 2)",
+      "seq_gate": [ 
+        0, 0, 0, 0, 
+        1, 0, 0, 0, 
+        0, 0, 0, 0, 
+        1, 0, 0, 0 
+    ],
+      "output": [{}]
+    },
+    // --- PISTA 3: CH 4 ---
+    {
+      "seq_id": "CH 4",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 3,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 3)",
+      "seq_mute": "get_var('track_mutes', 3)",
+      "seq_gate": [ 
+        1, 1, 1, 1, 
+        1, 1, 1, 1,
+        1, 1, 1, 1,
+        1, 1, 1, 1,
+    ],
+
+    "seq_velocity": [ 
+        90, 110, 90, 110,
+        90, 110, 90, 110,
+        90, 110, 90, 110,
+        90, 110, 90, 110
+      ],
+      "output": [{}]
+    },
+    // --- PISTA 4: OH 5 ---
+    {
+      "seq_id": "OH 5",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 4,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 4)",
+      "seq_mute": "get_var('track_mutes', 4)",
+      "seq_gate": [ 
+        0, 0, 1, 0, 
+        0, 0, 1, 0,
+        0, 0, 1, 0,
+        0, 0, 1, 0,
+    ],
+      "output": [{}]
+    },
+    // --- PISTA 5: SH 6 ---
+    {
+      "seq_id": "SH 6",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 5,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 5)",
+      "seq_mute": "get_var('track_mutes', 5)",
+      "seq_gate": [ 
+        1, 1, 1, 1, 
+        1, 1, 1, 1,
+        1, 1, 1, 1,
+        1, 1, 1, 1,
+    ],
+      "seq_velocity": "random(75, 105)",
+      "output": [{}]
+    },
+    // --- PISTA 6: RD 7 ---
+    {
+      "seq_id": "RD 7",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 6,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 6)",
+      "seq_mute": "get_var('track_mutes', 6)",
+      "seq_gate": [ 
+        0, 0, 1, 0, 
+        0, 0, 1, 0,
+        0, 0, 1, 0,
+        0, 0, 1, 1,
+    ],
+      "output": [{}]
+    },
+    // --- PISTA 7: CNL 8 ---
+    {
+      "seq_id": "CNL 8",
+      "clock_in": "reloj_maestro", "device_out": "sampler_out", "channel_out": 7,
+      "step_total": 16, "step_duration": "1/16", "seq_note_length": -1,
+      "seq_note": "get_var('sample_index', 7)",
+      "seq_mute": "get_var('track_mutes', 7)",
+      "seq_gate": [ 
+        0, 0, 0, 0, 
+        0, 0, 0, 0,
+        0, 0, 1, 0,
+        0, 1, 0, 1,
+    ],
+      "output": [{}]
+    },
+  ]
+}

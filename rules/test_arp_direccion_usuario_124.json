@@ -1,0 +1,30 @@
+{
+    "device_alias": { "TECLADO": "X-TOUCH", "SINT": "TPT", "RELOJ": "CLOCK" },
+    "arpeggiator": [{
+        "arp_id": 1,
+        "device_in": "RELOJ",
+        "device_out": "SINT",
+        "step_duration": "1/16",
+        "arp_step_direction": "up"
+    }],
+    "input_filter": [
+        {
+            "_comment": "Alimenta notas al Arp 1.",
+            "device_in": "TECLADO",
+            "ch_in": 1,
+            "event_in": "note",
+            "output": [{ "arp_id": 1 }]
+        },
+        {
+            "_comment": "CC 2 activa una dirección de usuario [avanza 2, retrocede 1].",
+            "device_in": "TECLADO",
+            "ch_in": 1,
+            "event_in": "cc",
+            "value_1_in": 2,
+            "output": [{
+                "arp_id": 1,
+                "arp_step_direction": [2, -1]
+            }]
+        }
+    ]
+}

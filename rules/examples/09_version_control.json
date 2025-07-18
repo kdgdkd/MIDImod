@@ -1,0 +1,68 @@
+{
+    /// Example 9: Version Control for CC Mapping and User Variables.
+    /// Shows how different 'versions' can activate different behaviors or update user variables.
+    "user_variables": {
+      "filter_mode": "lowpass", /// Default filter mode (Version 0)
+      "resonance_value": 64      /// Default resonance value (Version 0)
+    },
+  
+    "midi_filter": [
+      {
+        /// Filter 1 (Version 0): Default state.
+        /// Maps incoming CC 10 (from 'MainController') to outgoing CC 74 (Filter Cutoff).
+        /// Sets default user variables.
+        "version": 0, /// This filter is active only in Version 0.
+        "device_in": "MainController (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": 10, /// Incoming CC 10
+        "output": [
+          {
+            "device_out": "Synth (e.g., 'DAW Synth')",
+            "value_1_out": 74, /// Output CC 74 (Filter Cutoff)
+            "value_2_out": "value_2_in"
+          },
+          {
+            /// This block (no 'device_out') only updates user variables on activation.
+            /// It ensures these variables are set when Version 0 becomes active.
+            "filter_mode": "lowpass",
+            "resonance_value": 64
+          }
+        ]
+      },
+      {
+        /// Filter 2 (Version 1): Alternate state.
+        /// Maps incoming CC 10 to a different CC (e.g., CC 71 for Resonance).
+        /// Updates user variables to reflect a new filter mode and resonance setting.
+        "version": 1, /// This filter is active only in Version 1.
+        "device_in": "MainController (e.g., 'X-TOUCH MINI')",
+        "event_in": "cc",
+        "value_1_in": 10, /// Incoming CC 10
+        "device_out": "Synth (e.g., 'DAW Synth')",
+        "output": [
+          {
+            "value_1_out": 71, /// Output CC 71 (Resonance)
+            "value_2_out": "value_2_in"
+          },
+          {
+            /// This block updates user variables for Version 1.
+            "filter_mode": "bandpass",
+            "resonance_value": 90
+          }
+        ]
+      },
+      {
+        /// Filter 3: A global control to change versions.
+        /// Incoming CC 127 changes the active version.
+        "device_in": "GlobalController (e.g., 'Akai MPK Mini')",
+        "event_in": "cc",
+        "value_1_in": 127, /// Incoming CC 127
+        "output": [
+          {
+            /// When CC 127 is received, cycles through available versions.
+            /// 'cycle_next' changes to the next version in the available_versions list.
+            "set_version": "cycle_next" 
+          }
+        ]
+      }
+    ]
+  }

@@ -1,0 +1,53 @@
+{
+    /// Example 8: Relative and Abs_Catchup CC Modes.
+    /// Demonstrates handling different types of Control Change inputs for specific controllers.
+    "midi_filter": [
+      {
+        /// Filter 1: Processes Relative Signed CC (e.g., from some encoders).
+        /// The 'value_2_in' context variable automatically adjusts based on previous sent value.
+        "device_in": "Controller A (e.g., 'Novation Launch Control XL')",
+        "event_in": "cc",
+        "value_1_in": 14, /// Example for CC 14
+        "cc_type_in": "relative_signed", /// Specifies how to interpret delta values.
+        "device_out": "Software Mixer (e.g., 'DAW Mixer')",
+        "output": [
+          {
+            /// Outputs the new absolute value calculated from the relative input.
+            "value_1_out": 7, /// Maps incoming CC 14 to outgoing CC 7 (Volume)
+          }
+        ]
+      },
+      {
+        /// Filter 2: Processes Abs_Catchup CC (e.g., some motorized faders or pick-up modes).
+        /// The filter only passes through a value when the incoming CC matches the last sent value.
+        "device_in": "Controller B (e.g., 'Behringer X-Touch')",
+        "event_in": "cc",
+        "value_1_in": 8, /// Example for CC 8 (Fader 1)
+        "cc_type_in": "abs_catchup", /// Controller must 'catch up' to the last sent value before sending.
+        "device_out": "Hardware Synth (e.g., 'Prophet Rev2')",
+        "output": [
+          {
+            /// Outputs the incoming value only when catchup condition is met.
+            "value_1_out": 74, /// Maps incoming CC 8 to outgoing CC 74 (Filter Cutoff)
+          }
+        ]
+      },
+      {
+        /// Filter 3: Processes Abs_Relative CC (hybrid mode for acceleration/threshold).
+        /// A common mode for encoders that will increase/decrease values depending on the sense of rotation
+        "device_in": "Controller C (e.g., 'Push 2')",
+        "event_in": "cc",
+        "value_1_in": 16, /// Example for CC 16
+        "cc_type_in": "abs_relative", /// Value changes relative to delta; uses abs2rel_factor.
+        "abs2rel_factor": 2.0, /// Adjusts sensitivity for 'abs_relative' mode.
+        "threshold": 0, /// Minimum change required to register (0 means always register).
+        "device_out": "Delay Unit (e.g., 'Eventide H9')",
+        "output": [
+          {
+            /// Outputs the accelerated/filtered value.
+            "value_1_out": 23, /// Maps incoming CC 16 to outgoing CC 23 (Delay Time)
+          }
+        ]
+      }
+    ]
+  }

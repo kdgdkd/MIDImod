@@ -1,0 +1,60 @@
+{
+    /// Example 17: Three Diverse Sequencers (Corrected Filters).
+    /// Demonstrates the configuration of three different sequencers,
+    /// each with unique modes and purposes.
+    /// Redundant 'start' and 'stop' filters have been removed,
+    /// as MIDIMod handles these transport messages natively.
+    
+    "sequencer": [
+      {
+        /// Sequencer 1: Simple Monophonic Melodic Sequence.
+        /// Plays a 4-step melodic pattern in quarter notes.
+        "seq_id": 1,
+        "device_in": "Master Clock (e.g., 'Ableton Live 1 Midi')",
+        "device_out": "Lead Synth (e.g., 'DAW Synth')",
+        "ppqn": 24,
+        "step_total": 4,
+        "step_duration": "1/4",
+        "seq_note": [60, 62, 64, 67], /// C4, D4, E4, G4
+        "seq_velocity": 100,
+        "seq_gate": 1,
+        "seq_note_length": 0.9,
+        "seq_active": 1 /// Starts active.
+      },
+      {
+        /// Sequencer 2: Drum Pattern Sequencer.
+        /// Plays a 16-step drum pattern, where notes represent drum hits
+        /// and 'seq_gate' controls active steps (rests).
+        "seq_id": 2,
+        "device_in": "Master Clock (e.g., 'Ableton Live 1 Midi')",
+        "device_out": "Drum Machine (e.g., 'TR-8S')",
+        "ppqn": 24,
+        "step_total": 16,
+        "step_duration": "1/16",
+        "swing": 0.1, /// Adds a slight swing to the rhythm.
+        "seq_note": [36, 38, 42, 46], /// Example: Kick, Snare, Closed Hat, Open Hat
+        "seq_velocity": 90,
+        /// A 16-step gate pattern: x-x- x-x- etc.
+        "seq_gate": [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+        "seq_note_length": 0.8,
+        "seq_active": 1 /// Starts active.
+      },
+      {
+        /// Sequencer 3: CC Automation Sequencer.
+        /// Automates a Control Change (e.g., CC 10 for Pan) over 8 steps.
+        /// The value for CC 10 sweeps from left to right and back.
+        "seq_id": 3,
+        "device_in": "Master Clock (e.g., 'Ableton Live 1 Midi')",
+        "device_out": "Any MIDI Device (e.g., 'DAW Mixer')",
+        "ppqn": 24,
+        "step_total": 8,
+        "step_duration": "1/8",
+        "seq_cc_number": 10, /// CC for Pan
+        /// Values for CC 10, sweeping from left (0) to right (127) and back.
+        "seq_cc_value": [0, 32, 64, 96, 127, 96, 64, 32],
+        "seq_active": 1 /// Starts active.
+      }
+    ]
+    /// No 'midi_filter' section needed for global START/STOP commands,
+    /// as MIDIMod handles these transport messages natively for connected sequencers/arpeggiators.
+  }
