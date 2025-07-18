@@ -7,79 +7,82 @@ MIDImod is a Python tool for musicians and producers who want to take full comm
 MIDImod helps you overcome common MIDI limitations and explore new creative avenues with your gear. Here are some key things you can achieve:
 
 - **Connect and Route Your Gear:**
-  
-  - Easily link any MIDI keyboard, controller, or sound module to another.
-  
-  - Direct MIDI signals exactly where needed, e.g., keyboard to synth A, pads to synth B.
-  
-  - Change MIDI channels for incoming or outgoing messages.
+
+  - Easily link any MIDI keyboard, controller, or sound module to another.
+
+  - Direct MIDI signals exactly where needed, e.g., keyboard to synth A, pads to synth B.
+
+  - Change MIDI channels for incoming or outgoing messages.
 
 - **Shape Melodies and Harmonies (Note Transformations):**
-  
-  - **Transpose:** Shift notes up or down by semitones or octaves.
-  
-  - **Create Layers & Harmonies:** Duplicate a melody to play on another sound or channel, perhaps an octave lower for a bassline, or add a harmony.
-  
-  - **Stay in Key (Scale Quantization):** Make sure your notes always fit a chosen musical scale (e.g., C Major, A Minor Pentatonic).
-  
-  - **Add Randomness:** Introduce controlled random variations to note pitches.
+
+  - **Transpose:** Shift notes up or down by semitones or octaves.
+
+  - **Create Layers & Harmonies:** Duplicate a melody to play on another sound or channel, perhaps an octave lower for a bassline, or add a harmony.
+
+  - **Stay in Key (Scale Quantization):** Make sure your notes always fit a chosen musical scale (e.g., C Major, A Minor Pentatonic).
+
+  - **Add Randomness:** Introduce controlled random variations to note pitches.
 
 - **Enhance Your Knobs and Faders (Control Change - CC - Manipulation):**
-  
-  - **Remap Controls:** Make one knob control a different parameter (e.g., CC #20 becomes CC #74 for filter control).
-  
-  - **Fine-Tune Control Ranges (Value Scaling):** Adjust how sensitive a knob is, making it cover a wider or narrower range of values.
-  
-  - **Smarter Knob Behavior (cc_type_in):**
-    
-    - **Absolute and Relative Encoders:** Receives, processes and sends absolute and relative control change signals.
-    
-    - **Accelerated Control (abs_relative):** Avoid sudden sound changes when a knob's physical position doesn't match the current parameter value. abs_relative mode will interpret changes to an absolute encoder as they were increments/decrements coming from a relative encoder.  
-    
-    - **"Catch-up" Mode (abs_catchup):** With similar purpose, the MIDI output only updates when your knob "catches up" with the parameter value. 
+
+  - **Remap Controls:** Make one knob control a different parameter (e.g., CC #20 becomes CC #74 for filter control).
+
+  - **Fine-Tune Control Ranges (Value Scaling):** Adjust how sensitive a knob is, making it cover a wider or narrower range of values.
+
+  - **Smarter Knob Behavior (cc_type_in):**
+
+    - **Absolute and Relative Encoders:** Receives, processes and sends absolute and relative control change signals.
+
+    - **Accelerated Control (abs_relative):** Avoid sudden sound changes when a knob's physical position doesn't match the current parameter value. abs_relative mode will interpret changes to an absolute encoder as they were increments/decrements coming from a relative encoder.  
+
+    - **"Catch-up" Mode (abs_catchup):** With similar purpose, the MIDI output only updates when your knob "catches up" with the parameter value.
 
 - **New Ways to Control (Event Conversion):**
-  
-  - Use note buttons on your keyboard to send Program Changes or trigger CC messages.
-  
-  - Use how hard you play (velocity) or aftertouch pressure to dynamically control synth parameters. For example, assign the note velocity to open the filter cutoff, producing a Velocity Tracking effect. 
+
+  - Use note buttons on your keyboard to send Program Changes or trigger CC messages.
+
+  - Use how hard you play (velocity) or aftertouch pressure to dynamically control synth parameters. For example, assign the note velocity to open the filter cutoff, producing a Velocity Tracking effect.
 
 - **Switch Setups Instantly (Versions - Dynamic Presets):**
-  
-  - Create different MIDI processing setups ("versions").
-  
-  - Use a MIDI note or CC from any controller to instantly switch between these versions – like changing pages on a controller or scenes for your whole MIDI rig with one button.
+
+  - Create different MIDI processing setups ("versions").
+
+  - Use a MIDI note or CC from any controller to instantly switch between these versions – like changing pages on a controller or scenes for your whole MIDI rig with one button.
 
 - **Build Complex Interactions (User Variables):**
-  
-  - Store values (like a CC value or note number) in temporary memory slots (var_0 to var_15).
-  
-  - Use these stored values in other rules to create more advanced, conditional MIDI effects.
+
+  - Store values (like a CC value or note number) in temporary memory slots (var_0 to var_15).
+
+  - Use these stored values in other rules to create more advanced, conditional MIDI effects.
 
 - **Control Sequencers and Synths (Transport & SysEx):**
-  
-  - Send Play/Stop/Continue to external sequencers or your DAW.
-  
-  - Send specific System Exclusive (SysEx) messages to change patches or detailed settings on your hardware synths.
+
+  - Send Play/Stop/Continue to external sequencers or your DAW.
+
+  - Send specific System Exclusive (SysEx) messages to change patches or detailed settings on your hardware synths.
 
 - **Integrate with Your DAW (Virtual Ports):**
-  
-  - MIDImod can create **virtual MIDI ports** on your computer. This means you can route MIDI from a controller through a MIDImod port, and read the processed output in any piece of software (like your DAW – Ableton Live, Logic Pro, etc.). It easily adds a powerful custom MIDI effects processor right into your digital workflow.
+
+  - MIDImod can create **virtual MIDI ports** on your computer. This means you can route MIDI from a controller through a MIDImod port, and read the processed output in any piece of software (like your DAW – Ableton Live, Logic Pro, etc.). It easily adds a powerful custom MIDI effects processor right into your digital workflow.
 
 - **Build Rhythmic Patterns (Sequencer):**
-  
-  - Create complex, multi-track sequences directly within your JSON files. Features include variable step length, probability, swing, micro-timing (shift), and dynamic control over every parameter per step. You can even import note data from standard MIDI files.
+
+  - Create complex, multi-track sequences directly within your JSON files. Features include variable step length, probability, swing, micro-timing (shift), and dynamic control over every parameter per step. You can even import note data from standard MIDI files.
 
 - **Generate Melodies (Arpeggiator):**
-  
-  - Trigger a flexible arpeggiator from any MIDI input. Includes multiple modes (up, down, up/down, random, as-played, stutter), octave controls, and latch functionality for hands-free operation.
+
+  - Trigger a flexible arpeggiator from any MIDI input. Includes multiple modes (up, down, up/down, random, as-played, stutter), octave controls, and latch functionality for hands-free operation.
 
 - **Combine and Organize (Multiple Rule Files):**
-  
-  - You can **load several rule files at once**. This allows you to keep your configurations modular. For example, one file for your keyboard setup, another for your drum machine, and a third for global controls. MIDImod merges them all together.
+
+  - You can **load several rule files at once**. This allows you to keep your configurations modular. For example, one file for your keyboard setup, another for your drum machine, and a third for global controls. MIDImod merges them all together.
 
 MIDImod is designed to be flexible. The configuration is done through simple JSON text files, making it powerful yet accessible.
 
+- **Get Visual Feedback with a Customizable TUI Monitor:**
+
+  - See the real-time values of your knobs and faders at a glance with a clean, text-based interface. You can define which controls are permanently displayed and even customize their colors for a personalized layout.
 
 ## Requirements
 
@@ -89,7 +92,8 @@ MIDImod is designed to be flexible. The configuration is done through simple JSO
 
 ### Installing Dependencies
 
-Open your computer's terminal or command line interface and type:  
+Open your computer's terminal or command line interface and type:  
+
 pip install mido python-rtmidi prompt-toolkit json5 python-osc watchdog
 
 (Note for Linux users: You might need to install system packages like libasound2-dev (on Debian/Ubuntu) for python-rtmidi to work correctly.)
@@ -98,48 +102,53 @@ pip install mido python-rtmidi prompt-toolkit json5 python-osc watchdog
 
 Run midimod.py from your terminal or command line.
 
-**Basic Syntax:**  
+**Basic Syntax:**  
+
 python midimod.py [rule_file_name_1] [rule_file_name_2] [...] [options]
 
 - **[rule_file_name_...]**: (Optional) The names of your rule files (without the .json extension). These files should be in a subfolder named rules/. If you don't provide any, MIDImod will show an interactive selector where you can choose and order multiple files.
 
 - **Options:**
-  
-  - --list-ports: Shows a list of all MIDI input and output devices connected to your computer and then exits.
-  
-  - --live: Activates Live Mode. Rules are loaded from the `./live/` directory and are automatically reloaded when any file inside it is saved, without stopping the music.
-  
-  - --virtual-ports: Activates virtual MIDI port mode. MIDImod will create an input port (default: MIDImod_IN) and an output port (default: MIDImod_OUT) that other software can connect to.
-  
-  - --vp-in YOUR_INPUT_NAME, --vp-out YOUR_OUTPUT_NAME: Lets you specify custom names for the virtual MIDI ports.
-  
-  - --no-log: Starts with the real-time log monitor instead of the Terminal UI (TUI).
-  
-  - --help: Displays detailed help information and all available options.
+
+  - --list-ports: Shows a list of all MIDI input and output devices connected to your computer and then exits.
+
+  - --live: Activates Live Mode. Rules are loaded from the `./live/` directory and are automatically reloaded when any file inside it is saved, without stopping the music.
+
+  - --virtual-ports: Activates virtual MIDI port mode. MIDImod will create an input port (default: MIDImod_IN) and an output port (default: MIDImod_OUT) that other software can connect to.
+
+  - --vp-in YOUR_INPUT_NAME, --vp-out YOUR_OUTPUT_NAME: Lets you specify custom names for the virtual MIDI ports.
+
+  - --no-log: Starts with the real-time log monitor instead of the Terminal UI (TUI).
+
+  - --help: Displays detailed help information and all available options.
 
 **Examples of How to Run MIDImod:**
 
-- **Using the interactive selector to choose rule files:**  
-  python midimod.py
+- **Using the interactive selector to choose rule files:**  
 
-- **Loading specific rule files (e.g., my_setup.json and live_performance.json):**  
-  python midimod.py my_setup live_performance
+  python midimod.py
 
-- **Listing your available MIDI ports:**  
-  python midimod.py --list-ports
+- **Loading specific rule files (e.g., my_setup.json and live_performance.json):**  
+
+  python midimod.py my_setup live_performance
+
+- **Listing your available MIDI ports:**  
+
+  python midimod.py --list-ports
 
 ## OSC (Open Sound Control) Integration
 
 MIDImod can send and receive OSC messages, allowing it to communicate with a wide range of creative software like TouchDesigner, VCV Rack, or Max/MSP.
 
 ### Receiving OSC
+
 Define an `osc_filter` to trigger MIDI actions from incoming OSC messages. For example, an OSC message to `/play/kick` can trigger a MIDI note.
 
 ### Sending OSC
+
 Use the `send_osc` action inside any `output` block to send an OSC message when a MIDI event occurs.
 
 This allows you to control visuals, synth parameters in other apps, or custom performance tools directly from your MIDI controllers.
-
 
 ## Live Mode for Performance and Improvisation
 
@@ -149,19 +158,29 @@ If you save a modification to any `.json` file in the `./live/` folder, MIDImod 
 
 This allows for powerful, on-the-fly arrangement and sound design:
 
--   **Modify Sequences in Real Time:** While a sequence is playing, you can open its JSON file, change the `seq_transpose` or `seq_gate` arrays, and upon saving, the sequence will adopt the new pattern on its next loop.
--   **Tweak Controller Mappings:** You can adjust CC mappings, change a knob's scale, or remap a controller to a different synth parameter mid-performance.
--   **Evolve Your Setup:** Add or remove entire filters or modules. For example, you could introduce a new arpeggiator rule, save the file, and immediately start using it.
+-   **Modify Sequences in Real Time:** While a sequence is playing, you can open its JSON file, change the `seq_transpose` or `seq_gate` arrays, and upon saving, the sequence will adopt the new pattern on its next loop.
+  
+-   **Tweak Controller Mappings:** You can adjust CC mappings, change a knob's scale, or remap a controller to a different synth parameter mid-performance.
+  
+-   **Evolve Your Setup:** Add or remove entire filters or modules. For example, you could introduce a new arpeggiator rule, save the file, and immediately start using it.
+  
 
 **To use Live Mode:**
 
-1.  Create a `live/` directory next to `midimod.py`.
-2.  Place your performance rule files inside it.
-3.  Run MIDImod with the `--live` flag:
-    ```bash
-    python midimod.py --live
-    ```
-4.  Open your rule files in a text editor and start performing. Every `Ctrl+S` becomes part of your musical expression.
+1.  Create a `live/` directory next to `midimod.py`.
+  
+2.  Place your performance rule files inside it.
+  
+3.  Run MIDImod with the `--live` flag:
+  
+
+    ```bash
+
+    python midimod.py --live
+
+    ```
+
+4.  Open your rule files in a text editor and start performing. Every `Ctrl+S` becomes part of your musical expression.
 
 ## Interactive Controls & Terminal UI (TUI)
 
@@ -169,42 +188,48 @@ By default, MIDImod starts with a clean, full-screen **Terminal User Interface (
 
 While the script is running, you can use these keys in both the TUI and the log monitor:
 
--   **`m`**: Toggles between the **Terminal UI (TUI)** and the real-time log monitor.
--   **`Spacebar`**: Cycles to the next available `version`.
--   **`0-9`**: Jumps directly to a specific `version` number.
--   **`Enter`**: Sends Start/Stop transport commands to the port aliased as `TPT_out`.
--   **`Ctrl+C`**: Safely shuts down the script.
-
+-   **`m`**: Toggles between the **Terminal UI (TUI)** and the real-time log monitor.
+  
+-   **`Spacebar`**: Cycles to the next available `version`.
+  
+-   **`0-9`**: Jumps directly to a specific `version` number.
+  
+-   **`Enter`**: Sends Start/Stop transport commands to the port aliased as `TPT_out`.
+  
+-   **`Ctrl+C`**: Safely shuts down the script.
+  
 
 ## Structure of Rule Files (.json)
 
 Your rule files are the heart of MIDImod. They use the **JSON5 format**, which allows for helpful comments and live in a folder named rules/ located in the same directory as the midimod.py script. Sections for the json files are:
 
-
 1. **"device_alias" (Object, Optional but Highly Recommended):**
-   
-   - Define aliases for your MIDI devices, allowing for partial coincidence with the port names.
+
+   - Define aliases for your MIDI devices, allowing for partial coincidence with the port names.
 
 2. **"user_variables" (Object, Optional):**
 
-   - Define global variables that can be accessed and modified by any rule, sequencer, or arpeggiator.
+   - Define global variables that can be accessed and modified by any rule, sequencer, or arpeggiator.
 
 3. **"midi_filter" (List of Objects, Usually Required):**
-   
-   - Your main MIDI processing rules. Signals that match the input conditions will be processed.
+
+   - Your main MIDI processing rules. Signals that match the input conditions will be processed.
 
 4. **"sequencer" (List of Objects, Optional):**
 
-   - Define one or more pattern-based sequencers.
+   - Define one or more pattern-based sequencers.
 
 5. **"arpeggiator" (List of Objects, Optional):**
 
-   - Define templates for the arpeggiator modules.
+   - Define templates for the arpeggiator modules.
 
-6. **"osc_filter" (List of Objects, Optional):**
+6. **"tui_cc_monitor" (List of Objects, Optional):**
 
-   - Define rules that react to incoming OSC messages.
+   - Configure the real-time CC monitor panel in the Text-based User Interface (TUI).
 
+7. **"osc_filter" (List of Objects, Optional):**
+
+   - Define rules that react to incoming OSC messages.
 
 ### Creative Modules: Sequencer & Arpeggiator
 
@@ -212,24 +237,39 @@ Beyond simple MIDI filtering, MIDImod includes powerful, pattern-based creative 
 
 ### The Sequencer
 
-The sequencer allows you to create complex, multi-track melodic and rhythmic patterns that are driven by an external MIDI clock. 
+The sequencer allows you to create complex, multi-track melodic and rhythmic patterns that are driven by an external MIDI clock.
+
 **To create a sequencer, add an object to the `"sequencer"` list in your JSON file:**
 
 ```
 "sequencer": [
- {
- "seq_id": "my_first_sequence",
- "clock_in": "MasterClock",
- "device_out": "MySynth",
- "channel_out": 1,
- "step_total": 16,
- "step_duration": "1/16",
- "seq_root_note": 48,
- "seq_transpose": [0, 3, 5, 7, 0, 3, 5, 7, 0, 3, 5, 7, 0, 3, 5, 7],
- "output": [{
-     "value_1_out": "root_note_out + transpose_out"
-     }]
- }
+
+ {
+
+ "seq_id": "my_first_sequence",
+
+ "clock_in": "MasterClock",
+
+ "device_out": "MySynth",
+
+ "channel_out": 1,
+
+ "step_total": 16,
+
+ "step_duration": "1/16",
+
+ "seq_root_note": 48,
+
+ "seq_transpose": [0, 3, 5, 7, 0, 3, 5, 7, 0, 3, 5, 7, 0, 3, 5, 7],
+
+ "output": [{
+
+     "value_1_out": "root_note_out + transpose_out"
+
+     }]
+
+ }
+
 ]
 ```
 
@@ -297,15 +337,25 @@ It works in two parts: a template definition in the "arpeggiator" list, and a�
 
 ```
 "arpeggiator": [
-    {
-        "arp_id": 1,
-        "device_out": "MySynth",
-        "channel_out": 2,
-        "arp_mode": "updown",
-        "step_duration": "1/16",
-        "arp_octaves": 2,
-        "arp_latch": false
-    }
+
+    {
+
+        "arp_id": 1,
+
+        "device_out": "MySynth",
+
+        "channel_out": 2,
+
+        "arp_mode": "updown",
+
+        "step_duration": "1/16",
+
+        "arp_octaves": 2,
+
+        "arp_latch": false
+
+    }
+
 ]
 ```
 
@@ -313,11 +363,17 @@ It works in two parts: a template definition in the "arpeggiator" list, and a�
 
 ```
 "midi_filter": [
-    {
-        "device_in": "MyKeyboard",
-        "event_in": "note",
-        "arp_id": 1
-    }
+
+    {
+
+        "device_in": "MyKeyboard",
+
+        "event_in": "note",
+
+        "arp_id": 1
+
+    }
+
 ]
 ```
 
@@ -335,41 +391,41 @@ It works in two parts: a template definition in the "arpeggiator" list, and a�
 **Pattern and Note Selection Parameters:**
 
 - "arp_mode" (String): Controls how the arpeggiator selects notes from the ones you are holding down.
-  
-  - "as_played": Uses the notes in the exact order you played them.
-    
-  - "sorted": Sorts the notes from lowest to highest (this is the base for direction modes).
-    
-  - "outside_in": Plays the lowest note, then the highest, then the second-lowest, second-highest, and so on.
-    
-  - "random1": Shuffles the notes once and repeats that random pattern.
-    
-  - "random2": Picks a completely random note from the input on every step.
-    
-  - "stutter", "stutter4", "stutter8": Repeats each note in the pattern 2, 4, or 8 times before moving to the next.
-    
+
+  - "as_played": Uses the notes in the exact order you played them.
+
+  - "sorted": Sorts the notes from lowest to highest (this is the base for direction modes).
+
+  - "outside_in": Plays the lowest note, then the highest, then the second-lowest, second-highest, and so on.
+
+  - "random1": Shuffles the notes once and repeats that random pattern.
+
+  - "random2": Picks a completely random note from the input on every step.
+
+  - "stutter", "stutter4", "stutter8": Repeats each note in the pattern 2, 4, or 8 times before moving to the next.
+
 - "arp_step_direction" (String): Determines the direction of the pattern after it has been generated by arp_mode.
-  
-  - "up": Plays the pattern from start to end.
-    
-  - "down": Plays the pattern in reverse.
-    
-  - "updown": Plays forward, then backward, without repeating the end notes.
-    
-  - "updown_inclusive": Plays forward, then backward, repeating the start and end notes.
-    
-  - "random_walk": Moves one step up or down the pattern at random.
-    
-  - "random_jump": Jumps to any random step in the pattern.
-    
+
+  - "up": Plays the pattern from start to end.
+
+  - "down": Plays the pattern in reverse.
+
+  - "updown": Plays forward, then backward, without repeating the end notes.
+
+  - "updown_inclusive": Plays forward, then backward, repeating the start and end notes.
+
+  - "random_walk": Moves one step up or down the pattern at random.
+
+  - "random_jump": Jumps to any random step in the pattern.
+
 - "arp_octaves" (Integer): The number of octaves the pattern should span.
   
 - "arp_octave_mode" (String): How the octaves are applied.
   
-  - "up": Plays the full pattern, then plays it again an octave up, and so on.
-    
-  - "alternate": Plays each note of the pattern through all octaves before moving to the next note.
-    
+
+  - "up": Plays the full pattern, then plays it again an octave up, and so on.
+
+  - "alternate": Plays each note of the pattern through all octaves before moving to the next note.
 
 **Rhythm and Gate Parameters:**
 
@@ -388,8 +444,6 @@ It works in two parts: a template definition in the "arpeggiator" list, and a�
 
 Just like the sequencer, all arpeggiator parameters can be assigned dynamic expressions and controlled by user variables or incoming MIDI messages, allowing you to change the arpeggiation style in real-time.
 
-
-
 **Inside an "midi_filter" Object (a single filter):**
 
 - "version": (Optional) Activates filter only for specific version(s).
@@ -398,16 +452,11 @@ Just like the sequencer, all arpeggiator parameters can be assigned dynamic expr
 
 - Optional conditions on incoming events: "ch_in", "event_in", "value_1_in", "value_2_in", "cc_type_in": (for CC types "abs", "relative_signed", "relative_2c", "abs_relative", "abs_catchup").
 
-- If the incoming signal matches the filter, the values of the signal (channel, value 1, value 2, event type) are used for output processing, and will be used by default of no changes are defined. 
-
+- If the incoming signal matches the filter, the values of the signal (channel, value 1, value 2, event type) are used for output processing, and will be used by default of no changes are defined.
 
 - **Output Definition:**
-       
-     - "output": Optional section that defines a single transformation coming from an midi_filter. It can be ommited if there is a single output for the incoming filter.
 
-
-
-
+     - "output": Optional section that defines a single transformation coming from an midi_filter. It can be ommited if there is a single output for the incoming filter.
 
 **Key Output Parameters (whether direct or in "output" list):**
 
@@ -428,15 +477,14 @@ Just like the sequencer, all arpeggiator parameters can be assigned dynamic expr
 - Variable Assignment: e.g., "var_0": 100. (Access with var_0...var_15).
 
 - Advanced Value Transformations (for value_1_out, value_2_out):
-  
-  - Range Scaling: { "scale_value": "source", "range_in": [min,max], "range_out": [min,max] }
-  
-  - Note-to-Scale: { "scale_notes": {"scale_value": "note_var", "scale_root": num, "scale_type": "name"} }
 
-**Variables in Output Expressions:**  
+  - Range Scaling: { "scale_value": "source", "range_in": [min,max], "range_out": [min,max] }
+
+  - Note-to-Scale: { "scale_notes": {"scale_value": "note_var", "scale_root": num, "scale_type": "name"} }
+
+**Variables in Output Expressions:**  
+
 channel_in, value_1_in, value_2_in (input CC value after cc_type_in), delta_in (physical CC change), event_in, cc_type_in, cc_val2_saved (last sent value for output CC/ch), and var_0...var_15.
-
-
 
 User Variables and State Management
 
@@ -450,9 +498,13 @@ You can define global variables in the "user_variables" section of your JSON f
 
 ```
 "user_variables": {
-    "global_transpose": 0,
-    "effect_rate": 80,
-    "is_special_mode_active": 0
+
+    "global_transpose": 0,
+
+    "effect_rate": 80,
+
+    "is_special_mode_active": 0
+
 }
 ```
 
@@ -462,7 +514,9 @@ Once defined, you can access a variable directly by its name in any expression.
 
 ```
 "output": [{
-    "value_1_out": "value_1_in + global_transpose"
+
+    "value_1_out": "value_1_in + global_transpose"
+
 }]
 ```
 
@@ -472,8 +526,11 @@ To change the value of a user variable, use its name as a key inside an "output
 
 ```
 "output": [{
-    "global_transpose": "value_2_in",
-    "is_special_mode_active": "toggle(is_special_mode_active)"
+
+    "global_transpose": "value_2_in",
+
+    "is_special_mode_active": "toggle(is_special_mode_active)"
+
 }]
 ```
 
@@ -487,14 +544,17 @@ To change the value of a user variable, use its name as a key inside an "output
 All string values for output parameters are processed by Python's eval() function, giving you access to a powerful expression engine. You can perform mathematical operations, use comparisons, and call special built-in helper functions provided by MIDImod:
 
 - random(min, max): Returns a random integer between min and max.
-  
-  - Example: "value_2_out": "random(80, 110)"
+
+  - Example: "value_2_out": "random(80, 110)"
+
 - toggle(variable): Flips a variable's value between 0 and 1.
-  
-  - Example: "my_var": "toggle(my_var)"
+
+  - Example: "my_var": "toggle(my_var)"
+
 - chord(root, num_notes, scale_name): Generates a list of notes for a chord.
-  
-  - Example: "value_1_out": "chord(60, 3, 'minor')"
+
+  - Example: "value_1_out": "chord(60, 3, 'minor')"
+
 - scale_number(index): Returns the name of a scale from the user-defined scale_list.
   
 - get_var(array_name, index): Retrieves a value from an indexed array.
@@ -507,38 +567,52 @@ This allows for incredibly dynamic and generative possibilities directly within 
 For more complex manipulations, MIDImod provides special functions that you use by creating a JSON object as the value, instead of a simple string expression.
 
 - **scale_value (Range Scaling):** Remaps a numeric value from an input range to a new output range. This is perfect for limiting the range of a knob or inverting its response.
-  
-  **Example:** Limit a knob's output to a range between 50 and 100.
-  
-  ```
-  "value_2_out": {
-      "scale_value": "value_2_in",
-      "range_in": [0, 127],
-      "range_out": [50, 100]
-  }
-  ```
-  
+
+  **Example:** Limit a knob's output to a range between 50 and 100.
+
+  ```
+
+  "value_2_out": {
+
+      "scale_value": "value_2_in",
+
+      "range_in": [0, 127],
+
+      "range_out": [50, 100]
+
+  }
+
+  ```
+
 - **scale_notes (Note-to-Scale Quantization):** Forces an incoming MIDI note to snap to the nearest note within a specified musical scale. This is a powerful tool for ensuring your melodies are always in key.
-  
-  **Example:** Snap all incoming notes to the C Minor Pentatonic scale.
-  
-  ```
-  "value_1_out": {
-      "scale_notes": {
-          "scale_value": "value_1_in",
-          "scale_root": 60,
-          "scale_type": "minor_pentatonic"
-      }
-  }
-  ```
-  
-  - scale_value: The incoming note number to be quantized.
-    
-  - scale_root: The root note of the scale (e.g., 60 for C).
-    
-  - scale_type: The name of the scale to use. MIDImod includes over 80 predefined scales, from major and minor to dorian, phrygian_dominant, and pentatonic_blues.
-    
-  ### Using Index Functions for Dynamic Values
+
+  **Example:** Snap all incoming notes to the C Minor Pentatonic scale.
+
+  ```
+
+  "value_1_out": {
+
+      "scale_notes": {
+
+          "scale_value": "value_1_in",
+
+          "scale_root": 60,
+
+          "scale_type": "minor_pentatonic"
+
+      }
+
+  }
+
+  ```
+
+  - scale_value: The incoming note number to be quantized.
+
+  - scale_root: The root note of the scale (e.g., 60 for C).
+
+  - scale_type: The name of the scale to use. MIDImod includes over 80 predefined scales, from major and minor to dorian, phrygian_dominant, and pentatonic_blues.
+
+  ### Using Index Functions for Dynamic Values
 
 MIDImod includes powerful helper functions that allow you to dynamically select values from lists using a number or a variable (like a CC value). This is perfect for changing sequencer speeds, arpeggiator modes, or musical scales on the fly.
 
@@ -548,31 +622,49 @@ This function lets you pick a note duration from a predefined list. The default 
 
 **Example:** Use a knob (CC #23) to control the step duration of a sequencer.
 
-
 ```
 {
-    "device_alias": { "MyController": "BCR2000" },
-    "user_variables": { "seq_speed": "1/16" },
-    "midi_filter": [
-        {
-            "_comment": "CC 23 controls the 'seq_speed' variable.",
-            "device_in": "MyController",
-            "event_in": "cc",
-            "value_1_in": 23,
-            "output": [{
-                "seq_speed": "duration_index(value_2_in)"
-            }]
-        }
-    ],
-    "sequencer": [
-        {
-            "seq_id": "dynamic_speed_seq",
-            "step_duration": "seq_speed" // The step_duration reads from our variable
-        }
-    ]
+
+    "device_alias": { "MyController": "BCR2000" },
+
+    "user_variables": { "seq_speed": "1/16" },
+
+    "midi_filter": [
+
+        {
+
+            "_comment": "CC 23 controls the 'seq_speed' variable.",
+
+            "device_in": "MyController",
+
+            "event_in": "cc",
+
+            "value_1_in": 23,
+
+            "output": [{
+
+                "seq_speed": "duration_index(value_2_in)"
+
+            }]
+
+        }
+
+    ],
+
+    "sequencer": [
+
+        {
+
+            "seq_id": "dynamic_speed_seq",
+
+            "step_duration": "seq_speed" // The step_duration reads from our variable
+
+        }
+
+    ]
+
 }
 ```
-
 
 - **How it works:** Turning the knob sends a CC value (0-127). The duration_index(value_2_in) function uses this value as an index to pick a duration from its internal list. The result (e.g., "1/8") is then stored in the seq_speed variable, which the sequencer reads to change its speed.
 
@@ -582,38 +674,61 @@ This function works similarly but selects a scale name from the list of all avai
 
 **Example:** Use a knob to change the scale used for note quantization.
 
-
-
 ```
 {
-    "device_alias": { "MyController": "BCR2000", "MyKeyboard": "Keystation" },
-    "user_variables": { "current_scale": "major" },
-    "midi_filter": [
-        {
-            "_comment": "CC 24 selects the active scale.",
-            "device_in": "MyController",
-            "event_in": "cc",
-            "value_1_in": 24,
-            "output": [{
-                "current_scale": "scale_number(value_2_in)"
-            }]
-        },
-        {
-            "_comment": "Quantize keyboard input to the selected scale.",
-            "device_in": "MyKeyboard",
-            "event_in": "note",
-            "value_1_out": {
-                "scale_notes": {
-                    "scale_value": "value_1_in",
-                    "scale_root": 60,
-                    "scale_type": "current_scale" // Reads the scale name from our variable
-                }
-            }
-        }
-    ]
+
+    "device_alias": { "MyController": "BCR2000", "MyKeyboard": "Keystation" },
+
+    "user_variables": { "current_scale": "major" },
+
+    "midi_filter": [
+
+        {
+
+            "_comment": "CC 24 selects the active scale.",
+
+            "device_in": "MyController",
+
+            "event_in": "cc",
+
+            "value_1_in": 24,
+
+            "output": [{
+
+                "current_scale": "scale_number(value_2_in)"
+
+            }]
+
+        },
+
+        {
+
+            "_comment": "Quantize keyboard input to the selected scale.",
+
+            "device_in": "MyKeyboard",
+
+            "event_in": "note",
+
+            "value_1_out": {
+
+                "scale_notes": {
+
+                    "scale_value": "value_1_in",
+
+                    "scale_root": 60,
+
+                    "scale_type": "current_scale" // Reads the scale name from our variable
+
+                }
+
+            }
+
+        }
+
+    ]
+
 }
 ```
-
 
 - **How it works:** As you turn the knob, scale_number(value_2_in) picks a scale name (like "dorian", "pentatonic_minor", etc.) and stores it in the current_scale variable. The note quantizer then uses this variable to determine which scale to apply.
 
@@ -623,8 +738,11 @@ You can define your own ordered lists for durations and scales within any rule f
 
 ```
 {
-    "duration_list": ["1/32", "1/16", "1/8", "1/4"],
-    "scale_list": ["major", "minor_natural", "pentatonic_minor", "phrygian_dominant"]
+
+    "duration_list": ["1/32", "1/16", "1/8", "1/4"],
+
+    "scale_list": ["major", "minor_natural", "pentatonic_minor", "phrygian_dominant"]
+
 }
 ```
 
@@ -643,13 +761,20 @@ The set_var action is used inside an "output" block to write a value to a sp
 
 ```
 "output": [{
-    "set_var": {
-        "name": "ch_1_cc_values",
-        "index": 21,
-        "value": "value_2_in"
-    }
+
+    "set_var": {
+
+        "name": "ch_1_cc_values",
+
+        "index": 21,
+
+        "value": "value_2_in"
+
+    }
+
 }]
 ```
+
 - "name": The name of the array to modify.
 
 - "index": The position within the array to change (0-based).
@@ -672,8 +797,6 @@ The get_var function is used inside any expression to read a value from a spec
 
 This set_var/get_var mechanism is what allows you to create powerful, stateful logic where one control can influence the behavior of another.
 
-
-
 ##### The chord() Function
 
 The chord() function is a powerful tool for generating multiple notes from a single trigger. It can be used in value_1_out to create chords, layers, or complex harmonies.
@@ -686,10 +809,10 @@ The chord() function is a powerful tool for generating multiple notes from a s
   
 - scale_or_intervals: Can be either:
   
-  - A string with the name of a scale (e.g., "major", "minor_pentatonic"). The function will build a chord by stacking notes from this scale.
-    
-  - A list of integer intervals (e.g., [0, 4, 7]). The function will generate exactly those notes relative to the root.
-    
+
+  - A string with the name of a scale (e.g., "major", "minor_pentatonic"). The function will build a chord by stacking notes from this scale.
+
+  - A list of integer intervals (e.g., [0, 4, 7]). The function will generate exactly those notes relative to the root.
 
 **Example 1: Generating a C Major 7th chord**
 
@@ -697,11 +820,17 @@ This filter takes a single C4 note and transforms it into a full 4-note C-Major 
 
 ```
 "midi_filter": [{
-    "device_in": "MyKeyboard",
-    "event_in": "note_on",
-    "value_1_in": 60,
-    "device_out": "MyPads",
-    "value_1_out": "chord(60, 4, 'maj7_chord')"
+
+    "device_in": "MyKeyboard",
+
+    "event_in": "note_on",
+
+    "value_1_in": 60,
+
+    "device_out": "MyPads",
+
+    "value_1_out": "chord(60, 4, 'maj7_chord')"
+
 }]
 ```
 
@@ -713,11 +842,17 @@ This uses a custom list of intervals to create a specific voicing.
 
 ```
 "midi_filter": [{
-    "device_in": "MyPads",
-    "event_in": "note_on",
-    "value_1_in": 36,
-    "device_out": "MySynth",
-    "value_1_out": "chord(value_1, 5, [0, 7, 12, 19, 24])"
+
+    "device_in": "MyPads",
+
+    "event_in": "note_on",
+
+    "value_1_in": 36,
+
+    "device_out": "MySynth",
+
+    "value_1_out": "chord(value_1, 5, [0, 7, 12, 19, 24])"
+
 }]
 ```
 
@@ -725,8 +860,44 @@ This uses a custom list of intervals to create a specific voicing.
 
 When value_1_out evaluates to a list of notes (like the output of chord()), MIDImod automatically sends a separate MIDI message for each note in the list.
 
+### TUI CC Monitor
 
+The Text-based User Interface (TUI) includes a panel for monitoring Control Change (CC) values in real-time. You can customize which controls appear and how they look directly from your rule files.
 
+To configure the monitor, add a `tui_cc_monitor` block to your rule file. This block must contain a list of objects, where each object defines a control to monitor.
+
+**Example with Custom Colors:**
+
+```json
+"tui_cc_monitor": [
+
+    { "channel": 0, "cc": 7, "alias": "Master Vol", "bar_color": "#4682B4" },
+
+    { "channel": 1, "cc": 20, "alias": "Filtro Cutoff", "bar_color": "#FFD700" },
+
+    { "channel": 1, "cc": 21, "alias": "Filtro Res", "bar_color": "#FFD700" },
+
+    { "channel": 2, "cc": 91, "alias": "Reverb Send", "bar_color": "#2E8B57" }
+
+]
+```
+
+#### Parameters Per Control
+
+Each object in the list can have the following parameters:
+
+- channel (Required): The MIDI channel of the control (0-15).
+  
+- cc (Required): The CC number (0-127).
+  
+- alias (Required): A short, descriptive name that will appear in the TUI.
+  
+- bar_color (Optional): A hexadecimal color code (e.g., "#RRGGBB") for this control's progress bar. If omitted, a default gray color will be used.
+  
+
+#### Dynamic Controls
+
+In addition to the controls you define, any other CC that the script receives will temporarily appear in the panel. This allows you to see the activity of any control you move, even if you haven't configured it. These dynamic controls will always use the default color.
 
 ### MIDI Filters: The Core Logic
 
@@ -736,21 +907,37 @@ The "midi_filter" list is the heart of MIDImod. Each object in this list is a
 
 ```
 "midi_filter": [
-    {
-        "_comment": "A descriptive name for your rule",
-        "version": 0,
-        "device_in": "MyKeyboard",
-        "ch_in": 1,
-        "event_in": "note_on",
-        "value_1_in": "36-72",
 
-        "output": [
-            {
-                "device_out": "MySynth",
-                "value_1_out": "value_1_in + 12"
-            }
-        ]
-    }
+    {
+
+        "_comment": "A descriptive name for your rule",
+
+        "version": 0,
+
+        "device_in": "MyKeyboard",
+
+        "ch_in": 1,
+
+        "event_in": "note_on",
+
+        "value_1_in": "36-72",
+
+
+
+        "output": [
+
+            {
+
+                "device_out": "MySynth",
+
+                "value_1_out": "value_1_in + 12"
+
+            }
+
+        ]
+
+    }
+
 ]
 ```
 
@@ -770,74 +957,104 @@ These keys define what MIDI messages the filter will "catch". A message must mat
   
 - "event_in" (String or List of Strings): Filters by the type of MIDI message.
   
-  - Common values: "note_on", "note_off", "note" (matches both), "cc" (for control_change), "pc" (for program_change), "pitchwheel", "aftertouch".
+
+  - Common values: "note_on", "note_off", "note" (matches both), "cc" (for control_change), "pc" (for program_change), "pitchwheel", "aftertouch".
+
 - "value_1_in" (Integer or String): Filters by the first MIDI value.
-  
-  - For notes, this is the note number (0-127).
-    
-  - For CCs, this is the CC number (0-127).
-    
-  - For PCs, this is the program number (0-127).
-    
-  - Can be a single number, a list, or a range string ("60-72").
-    
+
+  - For notes, this is the note number (0-127).
+
+  - For CCs, this is the CC number (0-127).
+
+  - For PCs, this is the program number (0-127).
+
+  - Can be a single number, a list, or a range string ("60-72").
+
 - "value_2_in" (Integer or String): Filters by the second MIDI value.
-  
-  - For notes, this is the velocity (0-127).
-    
-  - For CCs, this is the CC value (0-127).
-    
+
+  - For notes, this is the velocity (0-127).
+
+  - For CCs, this is the CC value (0-127).
+
 - "if" (String Expression): For complex conditions that cannot be expressed with the keys above.
-  
-  Imagine you want to add a sub-bass layer to your main synth sound, but only when you've activated a special "sub mode" and are playing in the lower register of the keyboard.
-  
-  - The first filter sends all notes from your keyboard to your main synth channel, as usual.
-    
-  - The second filter also listens to your keyboard, but it has a condition: "if": "sub_mode == 1 and value_1 >= 48". This means it will only trigger if:
-    
-    1. The sub_mode variable has been set to 1.
-      
-    2. The incoming note (value_1) is C3 (note 48) or higher.
-      
-  - When both conditions are met, it sends a second note to channel 2, pitched one octave lower.
-    
-  - The third filter allows you to toggle the sub_mode variable on and off using a button on your controller.
-    
-  
-  ```
-  "user_variables": {
-      "sub_mode": 0
-  },
-  "midi_filter": [
-      {
-          "_comment": "Notes from Keyboard to Synth on ch1, always active",
-          "device_in": "MyKeyboard",
-          "event_in": "note",
-          "device_out": "MySynth"
-      },
-      {
-          "_comment": "Sub-bass layer on ch2, activated by sub_mode and higher notes",
-          "device_in": "MyKeyboard",
-          "event_in": "note",
-          "if": "sub_mode == 1 and value_1 >= 48",
-          "output": [{
-              "device_out": "MySynth",
-              "channel_out": 2,
-              "value_1_out": "value_1 - 12"
-          }]
-      },
-      {
-          "_comment": "A controller button to toggle the sub_mode on and off",
-          "device_in": "MyController",
-          "event_in": "note_on",
-          "value_1_in": 48,
-          "output": [{
-              "sub_mode": "toggle(sub_mode)"
-          }]
-      }
-  ]
-  ```
-  
+
+  Imagine you want to add a sub-bass layer to your main synth sound, but only when you've activated a special "sub mode" and are playing in the lower register of the keyboard.
+
+  - The first filter sends all notes from your keyboard to your main synth channel, as usual.
+
+  - The second filter also listens to your keyboard, but it has a condition: "if": "sub_mode == 1 and value_1 >= 48". This means it will only trigger if:
+
+    1. The sub_mode variable has been set to 1.
+
+    2. The incoming note (value_1) is C3 (note 48) or higher.
+
+  - When both conditions are met, it sends a second note to channel 2, pitched one octave lower.
+
+  - The third filter allows you to toggle the sub_mode variable on and off using a button on your controller.
+
+```
+"user_variables": {
+
+      "sub_mode": 0
+
+  },
+
+  "midi_filter": [
+
+      {
+
+          "_comment": "Notes from Keyboard to Synth on ch1, always active",
+
+          "device_in": "MyKeyboard",
+
+          "event_in": "note",
+
+          "device_out": "MySynth"
+
+      },
+
+      {
+
+          "_comment": "Sub-bass layer on ch2, activated by sub_mode and higher notes",
+
+          "device_in": "MyKeyboard",
+
+          "event_in": "note",
+
+          "if": "sub_mode == 1 and value_1 >= 48",
+
+          "output": [{
+
+              "device_out": "MySynth",
+
+              "channel_out": 2,
+
+              "value_1_out": "value_1 - 12"
+
+          }]
+
+      },
+
+      {
+
+          "_comment": "A controller button to toggle the sub_mode on and off",
+
+          "device_in": "MyController",
+
+          "event_in": "note_on",
+
+          "value_1_in": 48,
+
+          "output": [{
+
+              "sub_mode": "toggle(sub_mode)"
+
+          }]
+
+      }
+
+  ]
+```
 
 ### Output Actions
 
@@ -878,31 +1095,30 @@ When writing expressions for output parameters, you have access to these context
 For convenience and readability in your expressions, MIDImod provides several shorter aliases for the main context variables. You can use the long name or the short name interchangeably.
 
 - **For ch0_in_ctx (the incoming channel index, 0-15):**
-  
-  - channel_in
-    
-  - ch_in
-    
-  - channel
-    
+
+  - channel_in
+
+  - ch_in
+
+  - channel
+
 - **For value_in_1_ctx (the first MIDI value):**
-  
-  - value_1_in
-    
-  - value_1
-    
+
+  - value_1_in
+
+  - value_1
+
 - **For value_in_2_ctx (the second MIDI value):**
-  
-  - value_2_in
-    
-  - value_2
-    
+
+  - value_2_in
+
+  - value_2
+
 - **For event_type_in_ctx (the event type string):**
-  
-  - event_in
-    
-  - event
-    
+
+  - event_in
+
+  - event
 
 **Example:**
 
@@ -932,20 +1148,35 @@ This syntax can be used for both **input conditions** and **output actions**.
 
 ```
 // Standard Syntax
+
 {
-    "device_in": "MyKeyboard",
-    "event_in": "note_on",
-    "value_1_in": 60,
-    "output": [{ "device_out": "MySynth", "event_out": "pc", "value_1_out": 5 }]
+
+    "device_in": "MyKeyboard",
+
+    "event_in": "note_on",
+
+    "value_1_in": 60,
+
+    "output": [{ "device_out": "MySynth", "event_out": "pc", "value_1_out": 5 }]
+
 }
 
+
+
 // Shortcut Syntax
+
 {
-    "device_in": "MyKeyboard",
-    "note_on(60)": {
-        "device_out": "MySynth",
-        "pc(5)": null
-    }
+
+    "device_in": "MyKeyboard",
+
+    "note_on(60)": {
+
+        "device_out": "MySynth",
+
+        "pc(5)": null
+
+    }
+
 }
 ```
 
@@ -959,148 +1190,200 @@ This syntax can be used for both **input conditions** and **output actions**.
 When using shortcut syntax for an output action, the value of the key determines the second MIDI parameter.
 
 - Use null when no second parameter is needed. This is typical for Program Change or transport messages.
-  
-  ```
-  "pc(5)": null
-  "start()": null
-  ```
-  
+
 - Provide an expression or a number when a second parameter is required. This is typical for Control Change messages, where you need to specify the CC's value.
-  
-  ```
-  // Sends CC #22 with the same value that came in
-  "cc(22)": "value_2_in"
-  
-  // Sends CC #22 with a fixed value of 127
-  "cc(22)": 127
-  ```
 
+  `// Use null when no second parameter is needed   "pc(5)": null    "start()": null         // Sends CC #22 with the same value that came in    "cc(22)": "value_2_in"    // Sends CC #22 with a fixed value of 127    "cc(22)": 127`
 
+   
 
 ## Simple Rule File Examples
 
-
-
 **For a comprehensive list of practical examples, please see the [EXAMPLES.md](EXAMPLES.md) file.**
 
+Using simplified JSON where possible. Remember to adapt "device_alias" to your gear.  
 
-Using simplified JSON where possible. Remember to adapt "device_alias" to your gear.  
 **Common "device_alias" block for these examples:**
 
 ```
 {
-    "device_alias": {
-        "MyKeyboard": "PART_OF_YOUR_KEYBOARD_NAME",
-        "MyController": "PART_OF_YOUR_CONTROLLER_NAME",
-        "MySynth": "PART_OF_YOUR_SYNTH_NAME"
-    }
+
+    "device_alias": {
+
+        "MyKeyboard": "PART_OF_YOUR_KEYBOARD_NAME",
+
+        "MyController": "PART_OF_YOUR_CONTROLLER_NAME",
+
+        "MySynth": "PART_OF_YOUR_SYNTH_NAME"
+
+    }
+
 }
 ```
 
-
 ---
 
-**1. connect_keyboard_to_synth.json** (Direct Connection)  
+**1. connect_keyboard_to_synth.json** (Direct Connection)  
+
 Purpose: Everything from MyKeyboard goes to MySynth.
 
 ```
 {
-    "device_alias": { "MyKeyboard": "KB_NAME", "MySynth": "SYNTH_NAME" },
-    "midi_filter": [
-        {
-            "device_in": "MyKeyboard",
-            "device_out": "MySynth"
-        }
-    ]
+
+    "device_alias": { "MyKeyboard": "KB_NAME", "MySynth": "SYNTH_NAME" },
+
+    "midi_filter": [
+
+        {
+
+            "device_in": "MyKeyboard",
+
+            "device_out": "MySynth"
+
+        }
+
+    ]
+
 }
 ```
 
 ---
 
-**2. change_keyboard_channel.json**  
+**2. change_keyboard_channel.json**  
+
 Purpose: MyKeyboard channel 1 (ch_in: 1) output to MySynth channel 5 (channel_out: 4).
 
 ```
 {
-    "device_alias": { 
-        "MyKeyboard": "YourKeyboardName", 
-        "MySynth": "YourSynthName" 
-    },
-    "midi_filter": [
-        {
-            "device_in": "MyKeyboard", 
-            "ch_in": 1,
-            "device_out": "MySynth", 
-            "channel_out": 4
-        }
-    ]
+
+    "device_alias": {
+
+        "MyKeyboard": "YourKeyboardName",
+
+        "MySynth": "YourSynthName"
+
+    },
+
+    "midi_filter": [
+
+        {
+
+            "device_in": "MyKeyboard",
+
+            "ch_in": 1,
+
+            "device_out": "MySynth",
+
+            "channel_out": 4
+
+        }
+
+    ]
+
 }
 ```
 
 ---
 
-**3. transpose_octave.json**  
+**3. transpose_octave.json**  
+
 Purpose: Notes from MyKeyboard (Ch 1) sent to MySynth (Ch 1) one octave higher.
 
 ```
 {
-    "device_alias": { "MyKeyboard": "KB_NAME", 
-                      "MySynth": "SYNTH_NAME" },
-    "midi_filter": [
-        {
-            "device_in": "MyKeyboard", 
-            "ch_in": 1, 
-            "event_in": "note",
-            "device_out": "MySynth", 
-            "value_1_out": "value_1_in + 12"
-        }
-    ]
+
+    "device_alias": { "MyKeyboard": "KB_NAME",
+
+                      "MySynth": "SYNTH_NAME" },
+
+    "midi_filter": [
+
+        {
+
+            "device_in": "MyKeyboard",
+
+            "ch_in": 1,
+
+            "event_in": "note",
+
+            "device_out": "MySynth",
+
+            "value_1_out": "value_1_in + 12"
+
+        }
+
+    ]
+
 }
 ```
 
 ---
 
-**4. knob_controls_another_cc.json**  
+**4. knob_controls_another_cc.json**  
+
 Purpose: CC #20 from MyController (Ch 1) becomes CC #74 on MySynth (Ch 1).
 
 ```
 {
-    "midi_filter": [
-        {
-            "device_in": "MyController", 
-            "ch_in": 1, "event_in": "cc", 
-            "value_1_in": 20,
-            "device_out": "MySynth", 
-            "value_1_out": 74
-            /* value_2_out (CC value) will be inherited from input if not specified */
-        }
-    ]
+
+    "midi_filter": [
+
+        {
+
+            "device_in": "MyController",
+
+            "ch_in": 1, "event_in": "cc",
+
+            "value_1_in": 20,
+
+            "device_out": "MySynth",
+
+            "value_1_out": 74
+
+            /* value_2_out (CC value) will be inherited from input if not specified */
+
+        }
+
+    ]
+
 }
 ```
 
 ---
 
-**5. note_changes_program.json**  
+**5. note_changes_program.json**  
+
 Purpose: Middle C (note 60) on MyKeyboard (Ch 1) sends Program Change #5 to MySynth (Ch 1).
 
 ```
 {
-    "midi_filter": [
-        {
-            "device_in": "MyKeyboard", 
-            "ch_in": 1, 
-            "event_in": "note_on", 
-            "value_1_in": 60,
-            "device_out": "MySynth", 
-            "event_out": "pc", 
-            "value_1_out": 5
-        }
-    ]
+
+    "midi_filter": [
+
+        {
+
+            "device_in": "MyKeyboard",
+
+            "ch_in": 1,
+
+            "event_in": "note_on",
+
+            "value_1_in": 60,
+
+            "device_out": "MySynth",
+
+            "event_out": "pc",
+
+            "value_1_out": 5
+
+        }
+
+    ]
+
 }
 ```
 
 ---
-
 
 ## Console Monitor
 
